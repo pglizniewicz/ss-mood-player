@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ss-mood-player</title>
+    <link rel="stylesheet" href="./tokens.css">
+    <link rel="stylesheet" href="./style.css">
+    <script type="importmap">
+    {
+      "imports": {
+        "lit-html": "./libs/lit-html.js",
+        "@reduxjs/toolkit": "./reduction.js",
+        "spessasynth_core": "./libs/spessasynth_core.js"
+      }
+    }
+    </script>
+    <script type="module" src="./app.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#main">Przejdź do treści</a>
+    <header>
+        <h1>ss-mood-player</h1>
+        <p>Player plików XMI z przełączaniem wariantu w trakcie odtwarzania.</p>
+    </header>
+    <main id="main">
+        <b-player></b-player>
+    </main>
+    <footer>
+        <p>Odtwarzanie wymaga włączonego ekranu — iOS zatrzymuje dźwięk po zablokowaniu telefonu.</p>
+    </footer>
+</body>
+</html>

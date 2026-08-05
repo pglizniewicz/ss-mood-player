@@ -1,0 +1,40 @@
+:root {
+    color-scheme: light dark;
+
+    --color-surface: oklch(98% 0.005 260);
+    --color-surface-raised: oklch(94% 0.008 260);
+    --color-text: oklch(22% 0.02 260);
+    --color-text-muted: oklch(45% 0.02 260);
+    --color-accent: oklch(58% 0.16 145);
+    --color-accent-text: oklch(98% 0.01 145);
+    --color-error: oklch(52% 0.19 25);
+    --color-border: oklch(80% 0.01 260);
+
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 2rem;
+
+    --font-body: system-ui, sans-serif;
+    --font-mono: ui-monospace, monospace;
+    --font-size-body: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    --font-size-heading: clamp(1.5rem, 1.3rem + 1vw, 2.25rem);
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+
+    --measure: 70ch;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-surface: oklch(18% 0.015 260);
+        --color-surface-raised: oklch(24% 0.02 260);
+        --color-text: oklch(94% 0.01 260);
+        --color-text-muted: oklch(72% 0.02 260);
+        --color-accent: oklch(70% 0.15 145);
+        --color-accent-text: oklch(18% 0.02 145);
+        --color-error: oklch(70% 0.17 25);
+        --color-border: oklch(38% 0.015 260);
+    }
+}

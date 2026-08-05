@@ -1,0 +1,120 @@
+body {
+    container-type: inline-size;
+    min-block-size: 100dvh;
+    margin: 0;
+    padding-inline: var(--spacing-md);
+    padding-block: var(--spacing-md);
+    display: grid;
+    grid-template-areas: "header" "main" "footer";
+    gap: var(--spacing-lg);
+    align-content: start;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: var(--font-size-body);
+    line-height: 1.5;
+}
+
+header {
+    grid-area: header;
+
+    h1 {
+        margin-block: 0 var(--spacing-xs);
+        font-size: var(--font-size-heading);
+    }
+
+    p {
+        margin-block: 0;
+        max-inline-size: var(--measure);
+        color: var(--color-text-muted);
+    }
+}
+
+main {
+    grid-area: main;
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+footer {
+    grid-area: footer;
+    color: var(--color-text-muted);
+}
+
+b-player {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+section {
+    padding: var(--spacing-md);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface-raised);
+
+    h2 {
+        margin-block: 0 var(--spacing-sm);
+        font-size: 1.25rem;
+    }
+
+    p {
+        margin-block: 0 var(--spacing-sm);
+    }
+}
+
+label {
+    display: block;
+    margin-block-end: var(--spacing-xs);
+}
+
+button {
+    padding-block: var(--spacing-sm);
+    padding-inline: var(--spacing-md);
+    border: none;
+    border-radius: var(--radius-sm);
+    background-color: var(--color-accent);
+    color: var(--color-accent-text);
+    font: inherit;
+    cursor: pointer;
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+:focus-visible {
+    outline: 3px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+.error {
+    color: var(--color-error);
+}
+
+.skip-link {
+    position: absolute;
+    inset-block-start: var(--spacing-sm);
+    inset-inline-start: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-surface-raised);
+    transform: translateY(-200%);
+
+    &:focus {
+        transform: none;
+    }
+}
+
+@container (min-width: 45rem) {
+    b-player {
+        flex-direction: row;
+        align-items: start;
+
+        section {
+            flex: 1;
+        }
+    }
+}

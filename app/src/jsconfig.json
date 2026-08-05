@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "esnext",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "lib": ["esnext", "dom", "dom.iterable"],
+        "allowJs": true,
+        "checkJs": true,
+        "noEmit": true,
+        "strict": false,
+        "noImplicitAny": false,
+        "skipLibCheck": true,
+        "paths": {
+            "lit-html": ["./libs/lit-html.d.ts"],
+            "@reduxjs/toolkit": ["./reduction.js"],
+            "spessasynth_core": ["./libs/spessasynth_core.d.ts"]
+        }
+    },
+    "include": ["**/*.js", "**/*.d.ts"],
+    "exclude": ["libs/**/*.js"]
+}
