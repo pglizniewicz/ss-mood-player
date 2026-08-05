@@ -47,7 +47,9 @@ jobs:
 
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main'
+    # main deploys automatically; any other branch can be published on demand from the Actions
+    # tab, which is how a feature branch gets a preview before it is merged.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
