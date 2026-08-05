@@ -5,7 +5,7 @@
     "type": "module",
     "description": "Development tooling only. The application in app/src has no dependencies and no build step.",
     "scripts": {
-        "serve": "java .claude/skills/web-conventions/scripts/zws app/src",
+        "serve": "java --source 25 .claude/skills/web-conventions/scripts/zws app/src",
         "test": "node --test",
         "test:e2e": "playwright test",
         "typecheck": "tsc -p app/src/jsconfig.json",
