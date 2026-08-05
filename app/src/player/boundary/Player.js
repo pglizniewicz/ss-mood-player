@@ -1,8 +1,9 @@
 import BElement from "../../BElement.js";
 import { html } from "lit-html";
-import { loadFile, sequences } from "../control/sequences.js";
+import { scoreCycle, selectScore } from "../control/sequences.js";
 import { repeatToggled } from "../control/engine.js";
-import { play, sampleRate, startEngine, stop, useSequences, useSoundBank } from "./AudioOut.js";
+import { play, sampleRate, startEngine, stop, useSoundBank } from "./AudioOut.js";
+import "./Theme.js";
 import "./SequenceList.js";
 import "./Structure.js";
 import "./DebugLog.js";
@@ -23,7 +24,7 @@ class Player extends BElement {
     }
 
     view() {
-        const { engine, engineMessage, fileName, fileSize, fileError } = this.state;
+        const { engine, engineMessage } = this.state;
         return html`
         <section aria-labelledby="transport-heading">
             <h2 id="transport-heading">Odtwarzanie</h2>
@@ -34,29 +35,27 @@ class Player extends BElement {
                     ?disabled="${engine === "ready" || engine === "starting"}">
                     Uruchom silnik
                 </button>
-                <button type="button" @click="${() => this.playSelected()}"
-                    ?disabled="${!this.canPlay()}">
-                    Odtwórz
+                <button type="button" @click="${() => this.playScore()}" ?disabled="${!this.canPlay()}">
+                    Odtwórz partyturę
                 </button>
                 <button type="button" @click="${stop}" ?disabled="${!this.state.isPlaying}">
                     Zatrzymaj
                 </button>
             </div>
+            ${this.canPlay() ? "" : html`
+            <ul class="missing">
+                ${this.missing().map(reason => html`<li>${reason}</li>`)}
+            </ul>`}
+            ${this.scorePicker()}
             <label>
                 <input type="checkbox" .checked="${this.state.repeatSegment}"
                     @change="${({ target: { checked } }) => repeatToggled(checked)}">
-                Zapętl segment (udogodnienie odsłuchowe — w grze segment kończy się i silnik wybiera następny)
+                Zapętl pojedynczy moduł, zamiast iść dalej cyklem partytury
             </label>
-        </section>
-        <section aria-labelledby="file-heading">
-            <h2 id="file-heading">Plik</h2>
-            <label for="xmi">Plik XMI</label>
-            <input id="xmi" type="file" accept=".xmi,.XMI" @change="${this.pickFile}">
-            ${fileName && !fileError ? html`<p>${fileName} — ${fileSize} bajtów</p>` : ""}
-            ${fileError ? html`<p class="error">${fileName}: ${fileError}</p>` : ""}
             <label for="bank">Własny SoundFont (opcjonalnie)</label>
             <input id="bank" type="file" accept=".sf2,.sf3,.dls" @change="${this.pickBank}">
         </section>
+        <b-player-theme></b-player-theme>
         <b-player-sequences></b-player-sequences>
         <b-player-structure></b-player-structure>
         <b-player-log></b-player-log>
@@ -71,33 +70,59 @@ class Player extends BElement {
         }
         if (engine === "ready" && bankPresets > 0) {
             return html`${ENGINE_LABELS[engine]} — ${sampleRate()} Hz, ${bankPresets} presetów${
-                isPlaying ? html` · gra sekwencja ${playingSequence}` : ""}`;
+                isPlaying ? html` · gra moduł ${playingSequence}` : ""}`;
         }
         return ENGINE_LABELS[engine];
     }
 
-    /** @returns {boolean} whether there is something to play and something to play it with */
+    /** @returns {boolean} whether a faithful playback is possible */
     canPlay() {
-        return this.state.engine === "ready" && this.state.bankPresets > 0 && this.state.summaries.length > 0;
-    }
-
-    playSelected() {
-        useSequences(sequences());
-        play(this.state.selectedSequence, this.state.repeatSegment);
+        const { engine, bankPresets, summaries, scores } = this.state;
+        return engine === "ready" && bankPresets > 0 && summaries.length > 0 && scores.length > 0;
     }
 
     /**
-     * Reading the bytes is the boundary's job: the control layer takes an ArrayBuffer so it stays
-     * free of DOM types and runnable under `node --test`.
+     * Everything still standing in the way, listed at once rather than one at a time: a listener
+     * with no files loaded should see the whole requirement, not discover it in stages.
      *
-     * @param {{target: HTMLInputElement}} event the file input's change event
-     * @returns {Promise<void>}
+     * @returns {string[]} the reasons playback is not possible yet
      */
-    async pickFile({ target }) {
-        const [file] = target.files ?? [];
-        if (!file) return;
-        loadFile(file.name, await file.arrayBuffer());
-        useSequences(sequences());
+    missing() {
+        const { engine, bankPresets, bankTotal, summaries, scores } = this.state;
+        return [
+            engine !== "ready"
+                ? "Uruchom silnik — audio w przeglądarce startuje tylko z gestu użytkownika."
+                : "",
+            engine === "ready" && bankPresets === 0 && bankTotal > 0 ? "Bank dźwięków jeszcze się ładuje." : "",
+            summaries.length === 0 ? "Wgraj plik XMI z modułami muzycznymi." : "",
+            scores.length === 0
+                ? "Wgraj tabele partytury (THMn.BIN). Bez nich nie wiadomo, w jakiej kolejności grać moduły — sam XMI to bank czterotaktowych fragmentów w kilku tonacjach, a kolejność siedzi w tym pliku."
+                : ""
+        ].filter(reason => reason !== "");
+    }
+
+    /** @returns {unknown} the intensity-level picker, once the tables are known */
+    scorePicker() {
+        const { scores, selectedScore } = this.state;
+        if (scores.length === 0) return "";
+        return html`
+        <fieldset>
+            <legend>Partytura (poziom natężenia)</legend>
+            ${scores.map(({ index, sequences: cycle, keys }) => html`
+            <label>
+                <input type="radio" name="score" value="${index}" .checked="${index === selectedScore}"
+                    @change="${() => selectScore(index)}">
+                ${index}: moduły <span class="numeric">${cycle.join(" → ")}</span>
+                <em>tonacje ${keys.join(",")}</em>
+            </label>
+            `)}
+        </fieldset>
+        `;
+    }
+
+    playScore() {
+        const cycle = scoreCycle(this.state.selectedScore);
+        play(cycle[0] ?? this.state.selectedSequence, this.state.repeatSegment, cycle);
     }
 
     /**

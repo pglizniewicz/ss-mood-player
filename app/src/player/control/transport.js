@@ -31,9 +31,17 @@ const MAX_BOUNDARIES_PER_WINDOW = 8;
  * @param {(index: number) => (import("./parse.js").XmiSequence | undefined)} options.sequenceAt looks a segment up
  * @param {boolean} [options.repeatSegment] repeat the segment when nothing else is requested
  * @param {boolean} [options.cutOnSwitch] silence sounding notes when a switch happens mid-segment
+ * @param {(current: number) => (number | undefined)} [options.nextSequence] what follows a segment
+ *   when nothing was requested — this is where a score's superchunk cycle plugs in
  * @returns {object} the transport
  */
-export const createTransport = ({ sampleRate, sequenceAt, repeatSegment = true, cutOnSwitch = true }) => {
+export const createTransport = ({
+    sampleRate,
+    sequenceAt,
+    repeatSegment = true,
+    cutOnSwitch = true,
+    nextSequence
+}) => {
     /** @type {LogEntry[]} */
     const log = [];
     /** @type {Set<number>} */
@@ -104,6 +112,11 @@ export const createTransport = ({ sampleRate, sequenceAt, repeatSegment = true, 
             const target = pending;
             pending = undefined;
             return [...offs, ...enter(target, "atSegmentEnd")];
+        }
+
+        const following = nextSequence?.(current);
+        if (following !== undefined && following !== current) {
+            return [...offs, ...enter(following, "score")];
         }
         if (repeatSegment && (timeline?.endSample ?? 0) > 0) {
             position = 0;

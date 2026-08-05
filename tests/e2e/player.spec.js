@@ -1,5 +1,46 @@
 import { test, expect } from "@playwright/test";
 import { buildXmi } from "../fixtures/build-xmi.js";
+import { buildChunkTable, buildScoreTables } from "../fixtures/build-score.js";
+
+/** Two four-bar modules and a marker-only stub, the shape a System Shock theme file has. */
+const THEME = buildXmi([
+    { events: [{ type: "marker", text: "theme1 SCMIDIfile" }] },
+    {
+        events: [
+            { type: "trackName", text: "keeper" },
+            { type: "loopStart" },
+            { type: "programChange", channel: 10, program: 29 },
+            { type: "noteOn", channel: 10, note: 57, velocity: 110, duration: 12 },
+            { delta: 240, type: "loopEnd" }
+        ]
+    },
+    {
+        events: [
+            { type: "loopStart" },
+            { type: "programChange", channel: 10, program: 29 },
+            { type: "noteOn", channel: 10, note: 52, velocity: 110, duration: 12 },
+            { delta: 240, type: "loopEnd" }
+        ]
+    }
+]);
+
+/** Score 0 cycles superchunks 0 and 1, which are XMI sequences 1 and 2. */
+const TABLES = buildScoreTables({ scores: { 0: [0, 1, 0, 1] }, keys: { 0: [1, 1], 1: [5, 5] } });
+const CHUNKS = buildChunkTable({ 0: { bars: 4, channels: [10] }, 1: { bars: 4, channels: [10] } });
+
+/**
+ * @param {import("@playwright/test").Page} page the page under test
+ * @param {{withTables: boolean}} options whether to supply the score tables too
+ * @returns {Promise<void>}
+ */
+const pickTheme = async (page, { withTables }) => {
+    const files = [{ name: "THM1.XMI", mimeType: "application/octet-stream", buffer: Buffer.from(THEME) }];
+    if (withTables) {
+        files.push({ name: "THM1.BIN", mimeType: "application/octet-stream", buffer: Buffer.from(TABLES) });
+        files.push({ name: "THM1.DAT", mimeType: "application/octet-stream", buffer: Buffer.from(CHUNKS) });
+    }
+    await page.getByLabel(/Pliki motywu/).setInputFiles(files);
+};
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/index.html");
@@ -8,7 +49,7 @@ test.beforeEach(async ({ page }) => {
 test("the page renders the player panels", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "ss-mood-player", level: 1 })).toBeVisible();
     await expect(page.getByRole("status")).toHaveText(/silnik nieuruchomiony/);
-    await expect(page.getByLabel("Plik XMI")).toBeVisible();
+    await expect(page.getByLabel(/Pliki motywu/)).toBeVisible();
 });
 
 test("starting the engine loads the worklet and reports readiness", async ({ page }) => {
@@ -17,71 +58,44 @@ test("starting the engine loads the worklet and reports readiness", async ({ pag
     await expect(page.locator(".error")).toHaveCount(0);
 });
 
-test("picking an XMI file lists its sequences and branch points", async ({ page }) => {
-    const file = buildXmi([
-        {
-            events: [
-                { type: "trackName", text: "keeper" },
-                { type: "branch", index: 0 },
-                { type: "noteOn", channel: 3, note: 60, duration: 60 },
-                { delta: 240, type: "branch", index: 5 },
-                { delta: 240, type: "noteOn", channel: 3, note: 67, duration: 60 }
-            ]
-        },
-        { timeSignature: [3, 4], events: [{ type: "noteOn", channel: 9, note: 48, duration: 30 }] },
-        { events: [{ type: "marker", text: "theme1 SCMIDIfile" }] }
-    ]);
-
-    await page.getByLabel("Plik XMI").setInputFiles({
-        name: "mood.xmi",
-        mimeType: "application/octet-stream",
-        buffer: Buffer.from(file)
-    });
+test("an XMI without its score tables is listed but refuses to play", async ({ page }) => {
+    await pickTheme(page, { withTables: false });
 
     await expect(page.getByText("3 sekwencje w pliku")).toBeVisible();
-    // The marker-only stub is hidden until asked for.
-    const sequenceRadios = page.locator("b-player-sequences").getByRole("radio");
-    await expect(sequenceRadios).toHaveCount(2);
     await expect(page.getByText("keeper")).toBeVisible();
-    await page.getByLabel("Pokaż 1 bez ani jednej nuty (same markery)").check();
-    await expect(sequenceRadios).toHaveCount(3);
-
-    // Two branch marks, at ticks 0 and 240.
-    await expect(page.getByRole("cell", { name: "240", exact: true })).toBeVisible();
-
-    await sequenceRadios.nth(1).check();
-    await expect(page.getByText("Brak punktów skoku", { exact: false })).toBeVisible();
+    // The player says what is missing and why, instead of playing something unfaithful.
+    await expect(page.getByText("Wgraj tabele partytury", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Odtwórz partyturę" })).toBeDisabled();
 });
 
-test("plays a segment through the worklet and advances the transport", async ({ page }) => {
-    const file = buildXmi([{
-        events: [
-            { type: "loopStart" },
-            { type: "programChange", channel: 0, program: 48 },
-            { type: "noteOn", channel: 0, note: 60, velocity: 110, duration: 240 },
-            { delta: 480, type: "loopEnd" }
-        ]
-    }]);
+test("with the score tables the theme's intensity levels appear", async ({ page }) => {
+    await pickTheme(page, { withTables: true });
 
+    await expect(page.getByRole("group", { name: /Partytura/ })).toBeVisible();
+    // Superchunks 0 and 1 are sequences 1 and 2, in keys 1 and 5.
+    await expect(page.getByText("1 → 2 → 1 → 2")).toBeVisible();
+    await expect(page.getByText("tonacje 1,5,1,5")).toBeVisible();
+});
+
+test("plays a score's cycle through the worklet and moves between modules", async ({ page }) => {
     await page.getByRole("button", { name: "Uruchom silnik" }).click();
     // The bank is several megabytes; the status only reports presets once it has loaded.
     await expect(page.getByRole("status")).toContainText("presetów", { timeout: 60_000 });
 
-    await page.getByLabel("Plik XMI").setInputFiles({
-        name: "one.xmi",
-        mimeType: "application/octet-stream",
-        buffer: Buffer.from(file)
-    });
-    await page.getByRole("button", { name: "Odtwórz" }).click();
+    await pickTheme(page, { withTables: true });
+    await page.getByLabel(/Zapętl pojedynczy moduł/).uncheck();
+    await page.getByRole("button", { name: "Odtwórz partyturę" }).click();
 
     // The transport only advances if the audio graph is actually pulling the worklet.
-    await expect(page.getByText("start", { exact: false })).toBeVisible({ timeout: 15_000 });
     await expect
         .poll(async () => {
             const text = await page.getByText(/^Pozycja:/).textContent();
             return Number(text?.match(/tick\s+(\d+)/)?.[1] ?? 0);
         }, { timeout: 15_000, message: "the position tick never advanced" })
         .toBeGreaterThan(0);
+    // Each module is 240 ticks, so within a few seconds the cycle must have moved on.
+    await expect(page.getByText("przełączono", { exact: false }).first())
+        .toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".error")).toHaveCount(0);
 });
 

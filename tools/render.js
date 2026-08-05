@@ -15,6 +15,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { parseXmi, ticksToSeconds } from "../app/src/player/control/parse.js";
 import { createTransport } from "../app/src/player/control/transport.js";
 import { renderSegments, rmsWindows, BLOCK } from "../app/src/player/control/render.js";
+import { parseScore, sequenceIndexOf } from "../app/src/player/control/score.js";
 import {
     BasicSoundBank,
     SoundBankLoader,
@@ -50,6 +51,7 @@ const parseArguments = argv => {
             ? undefined
             : new Set(String(flag("channels")).split(",").map(Number)),
         then: flag("then") === undefined ? undefined : Number(flag("then")),
+        score: flag("score") === undefined ? undefined : Number(flag("score")),
         transpose: flag("transpose") === undefined
             ? undefined
             : new Map(String(flag("transpose")).split(",").map(pair => {
@@ -83,6 +85,36 @@ const printEnvelope = windows => {
     console.log(`\n  peak rms ${peak.toFixed(4)}, ${silent}/${windows.length} windows silent`);
 };
 
+/**
+ * Builds the superchunk cycle of a score from the tables beside the XMI file.
+ *
+ * @param {{xmi: string, score: number}} options the file and the score wanted
+ * @returns {Promise<{first: number, next: (current: number) => number}>} the cycle
+ */
+const scoreCycle = async ({ xmi, score }) => {
+    const base = xmi.replace(/\.xmi$/i, "");
+    const [bin, dat] = await Promise.all([
+        readFile(`${base}.BIN`).catch(() => readFile(`${base}.bin`)),
+        readFile(`${base}.DAT`).catch(() => readFile(`${base}.dat`).catch(() => undefined))
+    ]);
+    const tables = parseScore(new Uint8Array(bin), dat ? new Uint8Array(dat) : undefined);
+    const wanted = tables.scores.find(({ index }) => index === score);
+    if (!wanted) {
+        throw new Error(`score ${score} is empty; this theme defines ${tables.scores.map(({ index }) => index)}`);
+    }
+
+    const order = wanted.superchunks.map(sequenceIndexOf);
+    let at = 0;
+    console.log(`  score ${score}: superchunks [${wanted.superchunks}] -> sequences [${order}]`);
+    return {
+        first: order[0],
+        next: () => {
+            at = (at + 1) % order.length;
+            return order[at];
+        }
+    };
+};
+
 const main = async () => {
     const options = parseArguments(process.argv.slice(2));
     const { sequences } = parseXmi(await bytesOf(options.xmi));
@@ -108,12 +140,15 @@ const main = async () => {
         : BasicSoundBank.getSampleSoundBankFile();
     synth.soundBankManager.addSoundBank(SoundBankLoader.fromArrayBuffer(bankBytes), "main");
 
+    // A score is a cycle of superchunks; the game never plays one module on its own.
+    const cycle = options.score === undefined ? undefined : await scoreCycle(options);
     const transport = createTransport({
         sampleRate: options.rate,
         sequenceAt: index => sequences[index],
-        repeatSegment: options.repeat
+        repeatSegment: options.repeat,
+        nextSequence: cycle?.next
     });
-    transport.start(chosen);
+    transport.start(cycle ? cycle.first : chosen);
     // Queue a second variant to hear the switch land on the loop boundary.
     if (options.then !== undefined) transport.requestSequence(options.then);
 

@@ -129,6 +129,23 @@ fieldset {
     border-radius: var(--radius-sm);
 }
 
+.checklist {
+    margin-block: var(--spacing-sm);
+
+    .ok {
+        color: var(--color-accent);
+        font-weight: bold;
+    }
+
+    .missing {
+        color: var(--color-text-muted);
+    }
+}
+
+.missing {
+    color: var(--color-text-muted);
+}
+
 .log {
     max-block-size: 30dvh;
     overflow-y: auto;

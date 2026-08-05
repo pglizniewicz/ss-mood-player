@@ -38,9 +38,9 @@ class SynthProcessor extends AudioWorkletProcessor {
                 this.ready = true;
                 this.port.postMessage({ type: "ready", sampleRate });
                 if (this.queuedPlay) {
-                    const { index, repeat } = this.queuedPlay;
+                    const { index, repeat, cycle } = this.queuedPlay;
                     this.queuedPlay = undefined;
-                    this.play(index, repeat);
+                    this.play(index, repeat, cycle);
                 }
             })
             .catch(cause => this.port.postMessage({ type: "failed", message: cause.message }));
@@ -56,7 +56,7 @@ class SynthProcessor extends AudioWorkletProcessor {
             this.sequences = message.sequences;
             return;
         }
-        if (message.type === "play") return this.play(message.index, message.repeat);
+        if (message.type === "play") return this.play(message.index, message.repeat, message.cycle);
         if (message.type === "stop") return this.stop();
         if (message.type === "switch") return this.switchTo(message.index, message.when);
     }
@@ -80,17 +80,25 @@ class SynthProcessor extends AudioWorkletProcessor {
      * @param {boolean} repeat whether it repeats at its loop boundary
      * @returns {void}
      */
-    play(index, repeat) {
+    play(index, repeat, cycle) {
         // An SF3 bank whose Vorbis decoder is not ready yet decodes to silence and caches that
         // silence permanently, so the first note must wait.
         if (!this.ready) {
-            this.queuedPlay = { index, repeat };
+            this.queuedPlay = { index, repeat, cycle };
             return;
         }
+        // A score is a cycle of modules: the game moves to the next one at each segment end.
+        let at = 0;
         this.transport = createTransport({
             sampleRate,
-            sequenceAt: at => this.sequences[at],
-            repeatSegment: repeat
+            sequenceAt: position => this.sequences[position],
+            repeatSegment: repeat,
+            nextSequence: cycle?.length > 1
+                ? () => {
+                    at = (at + 1) % cycle.length;
+                    return cycle[at];
+                }
+                : undefined
         });
         this.reportedEntries = 0;
         this.pending = this.transport.start(index);

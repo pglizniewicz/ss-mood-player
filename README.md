@@ -69,11 +69,36 @@ nie modeluje ani czasów trwania XMI, ani skoków po branch pointach.
 Pliki XMI **nie są** w repozytorium (prawa autorskie do danych System Shocka). Wrzuć własne do
 `data/` — ten katalog jest w `.gitignore`. Testy automatyczne używają generowanych fikstur.
 
+## Player wymaga całego motywu, nie tylko XMI
+
+**Sam plik XMI nie wystarcza do wiernego odtworzenia.** To bank czterotaktowych modułów w kilku
+tonacjach; kolejność, w jakiej mają grać, siedzi w plikach obok:
+
+| plik | rola | wymagany |
+|---|---|---|
+| `THMn.XMI` | moduły muzyczne (u nas 50 sekwencji) | tak |
+| `THMn.BIN` | tabele partytury — 405 B | **tak** |
+| `THMn.DAT` | opis modułów: takty, maski kanałów — 786 B | opcjonalny |
+
+Zaznacz wszystkie naraz w polu „Pliki motywu". Bez `BIN` player **odmawia gry** i mówi dlaczego,
+zamiast odtwarzać coś, co nie brzmi jak gra.
+
+Format `BIN` odczytałem z `MacTune.c` w Shockolate, które wczytuje te same bajty do
+`track_table[8][4]`, `transition_table[9]`, `layering_table[32][10]` i `key_table[22][2]` — co ze
+stałymi z `mlimbs.h` daje dokładnie 405 bajtów. Superchunk `k` gra sekwencja XMI `k+1`
+(w `musicai.c`: `track = 1 + piece_ID`), a `key_table` podaje tonację każdego modułu i zgadza się
+z tonacją wyliczoną z samych nut — na tym stoi test w `tests/unit/score.test.js`.
+
 Co ustaliliśmy o `THM1.XMI` (CRC32 `e5732a74`, bit w bit plik z retailowego `SOUND/GENMIDI/`):
 50 czterotaktowych modułów w siedmiu grupach tonalnych, numeracja programów **General MIDI**
 (gra wozi jeden zestaw `THM*.XMI` plus `INI-MT.XMI` i `INI-SC.XMI` — różni się tylko
-inicjalizacja urządzenia), kanał 9 to perkusja GM. Kolejności modułów w XMI nie ma — siedzi
-w `SOUND/THM1.DAT` i `SOUND/THM1.BIN`.
+inicjalizacja urządzenia), kanał 9 to perkusja GM.
+
+Render partytury z linii poleceń:
+
+```bash
+npm run render -- data/THM1.XMI /tmp/score6.wav --score 6 --seconds 46
+```
 
 Eksport do standardowego MIDI, gdy trzeba sprawdzić nuty w innym narzędziu:
 

@@ -11,6 +11,9 @@ import {
 import {
     fileFailedAction,
     fileLoadedAction,
+    scoreFailedAction,
+    scoreLoadedAction,
+    scoreSelectedAction,
     sequenceSelectedAction,
     stubsToggledAction,
     switchWhenChangedAction
@@ -41,6 +44,14 @@ const LOG_LIMIT = 40;
  * @property {boolean} repeatSegment whether a segment repeats at its loop boundary
  * @property {"atSegmentEnd" | "now"} switchWhen when a variant change takes effect
  * @property {import("../control/transport.js").LogEntry[]} log recent transport decisions
+ * @property {string} scoreName name of the loaded score table file, empty when none
+ * @property {string} scoreError why the score tables could not be read, empty otherwise
+ * @property {boolean} hasChunkTable whether the optional DAT file was supplied too
+ * @property {{index: number, superchunks: number[], sequences: number[], keys: number[]}[]} scores
+ *   the intensity levels the theme defines
+ * @property {number[]} transitions transition superchunks
+ * @property {number} layerCount how many overlay layers the theme defines
+ * @property {number} selectedScore the intensity level chosen for playback
  */
 
 /** @type {PlayerState} */
@@ -62,7 +73,14 @@ const initialState = {
     positionTick: 0,
     repeatSegment: true,
     switchWhen: "atSegmentEnd",
-    log: []
+    log: [],
+    scoreName: "",
+    scoreError: "",
+    hasChunkTable: false,
+    scores: [],
+    transitions: [],
+    layerCount: 0,
+    selectedScore: -1
 };
 
 export const player = createReducer(initialState, builder => {
@@ -105,5 +123,20 @@ export const player = createReducer(initialState, builder => {
         state.showStubs = payload;
     }).addCase(switchWhenChangedAction, (state, { payload }) => {
         state.switchWhen = payload;
+    }).addCase(scoreLoadedAction, (state, { payload }) => {
+        state.scoreName = payload.name;
+        state.scoreError = "";
+        state.hasChunkTable = payload.hasChunks;
+        state.scores = payload.scores;
+        state.transitions = payload.transitions;
+        state.layerCount = payload.layerCount;
+        state.selectedScore = payload.scores[0]?.index ?? -1;
+    }).addCase(scoreSelectedAction, (state, { payload }) => {
+        state.selectedScore = payload;
+    }).addCase(scoreFailedAction, (state, { payload: { name, message } }) => {
+        state.scoreName = name;
+        state.scoreError = message;
+        state.scores = [];
+        state.selectedScore = -1;
     });
 });

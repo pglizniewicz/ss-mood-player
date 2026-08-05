@@ -128,10 +128,11 @@ export const useSequences = sequences => {
 /**
  * @param {number} index the segment to play
  * @param {boolean} repeat whether it repeats at its loop boundary
+ * @param {number[]} [cycle] a score's module cycle, which the transport follows at each boundary
  * @returns {void}
  */
-export const play = (index, repeat) => {
-    synthNode?.port.postMessage({ type: "play", index, repeat });
+export const play = (index, repeat, cycle) => {
+    synthNode?.port.postMessage({ type: "play", index, repeat, cycle });
     playbackStarted(index);
 };
 

@@ -1,6 +1,7 @@
 import { createAction } from "@reduxjs/toolkit";
 import store from "../../store.js";
 import { loopBars, parseXmi, ticksToSeconds } from "./parse.js";
+import { keyOf, parseScore, sequenceIndexOf } from "./score.js";
 
 /**
  * Parsed sequences stay in module scope rather than in the store: every reducer clones its
@@ -13,9 +14,12 @@ let loaded = [];
 
 export const fileLoadedAction = createAction("fileLoadedAction");
 export const fileFailedAction = createAction("fileFailedAction");
+export const scoreLoadedAction = createAction("scoreLoadedAction");
+export const scoreFailedAction = createAction("scoreFailedAction");
 export const sequenceSelectedAction = createAction("sequenceSelectedAction");
 export const stubsToggledAction = createAction("stubsToggledAction");
 export const switchWhenChangedAction = createAction("switchWhenChangedAction");
+export const scoreSelectedAction = createAction("scoreSelectedAction");
 
 /**
  * @returns {import("./parse.js").XmiSequence[]} the sequences of the loaded file
@@ -85,6 +89,53 @@ export const loadFile = (name, buffer) => {
 };
 
 /**
+ * The score tables, which decide which module plays when. Kept beside the sequences rather than
+ * in the store for the same reason: the UI needs a summary, not the tables themselves.
+ *
+ * @type {import("./score.js").ScoreTables | undefined}
+ */
+let tables;
+
+/**
+ * @returns {import("./score.js").ScoreTables | undefined} the loaded score tables
+ */
+export const scoreTables = () => tables;
+
+/**
+ * @param {number} score which intensity level
+ * @returns {number[]} the sequence indices it cycles through, empty when unknown
+ */
+export const scoreCycle = score =>
+    (tables?.scores.find(({ index }) => index === score)?.superchunks ?? []).map(sequenceIndexOf);
+
+/**
+ * @param {string} name file name, for display only
+ * @param {ArrayBuffer} bin the THMn.BIN contents
+ * @param {ArrayBuffer} [dat] the THMn.DAT contents
+ * @returns {void}
+ */
+export const loadScore = (name, bin, dat) => {
+    try {
+        tables = parseScore(new Uint8Array(bin), dat ? new Uint8Array(dat) : undefined);
+        store.dispatch(scoreLoadedAction({
+            name,
+            hasChunks: tables.chunks.size > 0,
+            scores: tables.scores.map(({ index, superchunks }) => ({
+                index,
+                superchunks,
+                sequences: superchunks.map(sequenceIndexOf),
+                keys: superchunks.map(superchunk => keyOf(tables, superchunk))
+            })),
+            transitions: tables.transitions.filter(value => value !== 255),
+            layerCount: tables.layering.size
+        }));
+    } catch (cause) {
+        tables = undefined;
+        store.dispatch(scoreFailedAction({ name, message: cause.message }));
+    }
+};
+
+/**
  * @param {number} index position in the file
  * @returns {void}
  */
@@ -98,6 +149,14 @@ export const selectSequence = index => {
  */
 export const toggleStubs = showStubs => {
     store.dispatch(stubsToggledAction(showStubs));
+};
+
+/**
+ * @param {number} index which intensity level to play
+ * @returns {void}
+ */
+export const selectScore = index => {
+    store.dispatch(scoreSelectedAction(index));
 };
 
 /**
