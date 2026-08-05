@@ -69,6 +69,18 @@ nie modeluje ani czasów trwania XMI, ani skoków po branch pointach.
 Pliki XMI **nie są** w repozytorium (prawa autorskie do danych System Shocka). Wrzuć własne do
 `data/` — ten katalog jest w `.gitignore`. Testy automatyczne używają generowanych fikstur.
 
+Co ustaliliśmy o `THM1.XMI` (CRC32 `e5732a74`, bit w bit plik z retailowego `SOUND/GENMIDI/`):
+50 czterotaktowych modułów w siedmiu grupach tonalnych, numeracja programów **General MIDI**
+(gra wozi jeden zestaw `THM*.XMI` plus `INI-MT.XMI` i `INI-SC.XMI` — różni się tylko
+inicjalizacja urządzenia), kanał 9 to perkusja GM. Kolejności modułów w XMI nie ma — siedzi
+w `SOUND/THM1.DAT` i `SOUND/THM1.BIN`.
+
+Eksport do standardowego MIDI, gdy trzeba sprawdzić nuty w innym narzędziu:
+
+```bash
+node tools/export-midi.js data/THM1.XMI /tmp/seq9.mid --sequence 9
+```
+
 ## Konwencje
 
 Projekt stosuje zwendorowane skille [airails](https://github.com/AdamBien/airails) z
