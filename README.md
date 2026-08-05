@@ -23,10 +23,35 @@ są zwendorowane jako samodzielne moduły ESM w `app/src/libs/` i mapowane przez
 ## Testy
 
 ```bash
-npm test            # node --test: logika, architektura BCE
+npm test            # node --test: parser, timeline, transport, golden RMS, architektura BCE
 npm run typecheck   # tsc --checkJs na JSDoc, bez transpilacji
-npm run test:e2e    # Playwright + Chromium: warstwa przeglądarkowa
+npm run test:e2e    # Playwright + Chromium: worklet, bank, transport w przeglądarce
 ```
+
+## Render offline (narzędzie debugowania)
+
+```bash
+npm run render -- data/THM1.XMI /tmp/out.wav --sequence 9
+npm run render -- data/THM1.XMI /tmp/out.wav --sequence 9 --then 17   # przełączenie na granicy pętli
+```
+
+Wypisuje tabelę RMS w okienkach 100 ms i log transportu, więc słychać *i widać*, co się stało —
+bez przeglądarki i bez karty dźwiękowej. Renderuje ~30× szybciej niż realtime i używa dokładnie
+tego samego kodu (`timeline.js`, `transport.js`, `dispatch.js`, `render.js`) co worklet, więc jego
+wynik jest dowodem na temat prawdziwej ścieżki odtwarzania. Bez `--soundfont` bierze bank z repo;
+`--soundfont ""` nie jest obsługiwane, ale gdy plik nie istnieje, można wskazać własny.
+
+## SoundFont
+
+W repo jest **GeneralUser GS 2.0.3** w formacie SF3 (`app/src/assets/GeneralUserGS.sf3`,
+8 423 728 B, sha256 `e2ed326f…`), autorstwa **S. Christiana Collinsa**. Licencja *GeneralUser GS
+License v2.0* jest permisywna, zezwala na użycie komercyjne i modyfikacje, a autor **wprost prosi**,
+by nie linkować do jego plików, lecz hostować własną kopię — dokładnie to robimy. Pełny tekst
+licencji leży obok banku w `GeneralUserGS-LICENSE.txt`.
+
+Kopia pochodzi z repozytorium SpessaSynth (konwersja SF2 → SF3 tego samego banku), dlatego jej
+wewnętrzne pole `INAM` mówi „GeneralUser GS 2.0.3 BETA". Bank jest domyślny, nie jedyny — w UI
+można wgrać własny SF2/SF3/DLS.
 
 ## Architektura
 
@@ -66,7 +91,22 @@ Projekt stosuje zwendorowane skille [airails](https://github.com/AdamBien/airail
   Javy 25). Serwer wypisuje `HeadlessException`, bo nie może otworzyć przeglądarki bez X11 — to
   kosmetyczne, pliki serwuje dalej.
 
+## Uwaga o zwendorowanym silniku
+
+`spessasynth_core.js` to **jeden samowystarczalny plik ESM bez ani jednego importu** — dlatego
+nadaje się do zwendorowania bez bundlera. Ma natomiast wkompilowany dekoder Vorbisa (stb_vorbis
+jako WebAssembly w data-URI), potrzebny do banków SF3. Nic nie dociąga z sieci i działa tak samo
+w Node i w AudioWorklecie, ale to znaczy, że **przed pierwszą nutą trzeba poczekać na
+`processorInitialized`**: bank SF3 dekodowany przed gotowością dekodera daje ciszę i zapamiętuje ją
+na stałe. Worklet kolejkuje żądanie odtwarzania, dopóki nie jest gotowy.
+
 ## Status
 
-M0: scaffold, zwendorowane biblioteki, plumbing audio (AudioWorklet + render offline w Node), CI.
-Parser XMI, scheduler i przełączanie wariantów to kolejne kroki.
+- **M0** — scaffold, zwendorowane biblioteki, plumbing audio, CI.
+- **M1 / M1a** — parser XMI (kontener IFF, interval bytes, czasy trwania nut, `RBRN`, pętle
+  `116`/`117`, tempo, nazwy, zaślepki), zweryfikowany na prawdziwym THM1.XMI.
+- **M2** — timeline (note-offy z czasów trwania, tick→sample), transport (kwantyzacja zmiany
+  wariantu do granicy pętli, event log), SoundFont, `tools/render.js`, golden testy na obwiedni
+  RMS i **słyszalny dźwięk w przeglądarce**.
+
+Dalej: silnik nastrojów w stylu `mlimbs` (M3), mikser warstw kanałów (M4), PWA i deploy (M5).

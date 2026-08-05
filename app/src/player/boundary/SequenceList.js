@@ -1,12 +1,25 @@
 import BElement from "../../BElement.js";
 import { html } from "lit-html";
-import { selectSequence, toggleStubs } from "../control/Sequences.js";
+import { selectSequence, toggleStubs } from "../control/sequences.js";
+import { switchTo } from "./AudioOut.js";
 import { decimal, plural, seconds } from "../../format.js";
 
 class SequenceList extends BElement {
 
-    extractState({ player: { summaries, selectedSequence, declaredSequenceCount, showStubs } }) {
-        return { summaries, selectedSequence, declaredSequenceCount, showStubs };
+    extractState({ player: { summaries, selectedSequence, declaredSequenceCount, showStubs, isPlaying, switchWhen } }) {
+        return { summaries, selectedSequence, declaredSequenceCount, showStubs, isPlaying, switchWhen };
+    }
+
+    /**
+     * Choosing a variant while something is sounding is the whole point of the player: it becomes
+     * a switch request rather than just a selection.
+     *
+     * @param {number} index the sequence chosen
+     * @returns {void}
+     */
+    choose(index) {
+        selectSequence(index);
+        if (this.state.isPlaying) switchTo(index, this.state.switchWhen);
     }
 
     view() {
@@ -47,7 +60,7 @@ class SequenceList extends BElement {
     }
 
     /**
-     * @param {import("../control/Sequences.js").SequenceSummary} summary the sequence
+     * @param {import("../control/sequences.js").SequenceSummary} summary the sequence
      * @param {boolean} isSelected whether it is the sequence in focus
      * @returns {unknown} a lit-html template
      */
@@ -58,7 +71,7 @@ class SequenceList extends BElement {
         <li>
             <label>
                 <input type="radio" name="sequence" value="${index}" .checked="${isSelected}"
-                    @change="${() => selectSequence(index)}">
+                    @change="${() => this.choose(index)}">
                 <strong>${name || `sekwencja ${index}`}</strong>
                 ${isPlayable ? "" : html` <em>(bez nut)</em>`}
                 <br>

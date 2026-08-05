@@ -1,6 +1,6 @@
 import BElement from "../../BElement.js";
 import { html } from "lit-html";
-import { sequence } from "../control/Sequences.js";
+import { sequence } from "../control/sequences.js";
 import { loopBars, ticksPerBar, ticksToSeconds } from "../control/parse.js";
 import { decimal, seconds } from "../../format.js";
 
@@ -39,7 +39,7 @@ class Structure extends BElement {
         if (!loop) return html`<p>Bez pętli XMIDI — sekwencja gra raz i się kończy.</p>`;
         const bars = loopBars({ loop, ...rest });
         return html`
-        <table>
+        <div class="scroller"><table>
             <caption>Pętla XMIDI (kontrolery 116 / 117)</caption>
             <tbody>
                 <tr><th scope="row">Początek</th><td class="numeric">tick ${loop.startTick}</td></tr>
@@ -53,7 +53,7 @@ class Structure extends BElement {
                     <td>${loop.repeats === 0 ? "bez końca" : loop.repeats}</td>
                 </tr>
             </tbody>
-        </table>
+        </table></div>
         <p>
             Pętli nie wykonujemy jako nieskończonej — w System Shocku segment musi się skończyć,
             żeby silnik nastrojów mógł wybrać następny.
@@ -76,7 +76,7 @@ class Structure extends BElement {
 
         const perBar = ticksPerBar(selected);
         return html`
-        <table>
+        <div class="scroller"><table>
             <caption>Punkty skoku</caption>
             <thead>
                 <tr><th scope="col">Indeks</th><th scope="col">Tick</th><th scope="col">Takt</th><th scope="col">Czas</th></tr>
@@ -91,7 +91,7 @@ class Structure extends BElement {
                 </tr>
                 `)}
             </tbody>
-        </table>
+        </table></div>
         `;
     }
 }

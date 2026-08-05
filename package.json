@@ -9,6 +9,7 @@
         "test": "node --test",
         "test:e2e": "playwright test",
         "typecheck": "tsc -p app/src/jsconfig.json",
+        "render": "node tools/render.js",
         "vendor:lit-html": "./tools/update-lit-html.sh",
         "vendor:spessasynth": "./tools/update-spessasynth.sh"
     },

@@ -15,6 +15,7 @@ export const fileLoadedAction = createAction("fileLoadedAction");
 export const fileFailedAction = createAction("fileFailedAction");
 export const sequenceSelectedAction = createAction("sequenceSelectedAction");
 export const stubsToggledAction = createAction("stubsToggledAction");
+export const switchWhenChangedAction = createAction("switchWhenChangedAction");
 
 /**
  * @returns {import("./parse.js").XmiSequence[]} the sequences of the loaded file
@@ -97,4 +98,12 @@ export const selectSequence = index => {
  */
 export const toggleStubs = showStubs => {
     store.dispatch(stubsToggledAction(showStubs));
+};
+
+/**
+ * @param {"atSegmentEnd" | "now"} when a variant change should take effect
+ * @returns {void}
+ */
+export const changeSwitchWhen = when => {
+    store.dispatch(switchWhenChangedAction(when));
 };

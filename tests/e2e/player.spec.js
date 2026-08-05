@@ -40,16 +40,49 @@ test("picking an XMI file lists its sequences and branch points", async ({ page 
 
     await expect(page.getByText("3 sekwencje w pliku")).toBeVisible();
     // The marker-only stub is hidden until asked for.
-    await expect(page.getByRole("radio")).toHaveCount(2);
+    const sequenceRadios = page.locator("b-player-sequences").getByRole("radio");
+    await expect(sequenceRadios).toHaveCount(2);
     await expect(page.getByText("keeper")).toBeVisible();
     await page.getByLabel("Pokaż 1 bez ani jednej nuty (same markery)").check();
-    await expect(page.getByRole("radio")).toHaveCount(3);
+    await expect(sequenceRadios).toHaveCount(3);
 
     // Two branch marks, at ticks 0 and 240.
     await expect(page.getByRole("cell", { name: "240", exact: true })).toBeVisible();
 
-    await page.getByRole("radio").nth(1).check();
+    await sequenceRadios.nth(1).check();
     await expect(page.getByText("Brak punktów skoku", { exact: false })).toBeVisible();
+});
+
+test("plays a segment through the worklet and advances the transport", async ({ page }) => {
+    const file = buildXmi([{
+        events: [
+            { type: "loopStart" },
+            { type: "programChange", channel: 0, program: 48 },
+            { type: "noteOn", channel: 0, note: 60, velocity: 110, duration: 240 },
+            { delta: 480, type: "loopEnd" }
+        ]
+    }]);
+
+    await page.getByRole("button", { name: "Uruchom silnik" }).click();
+    // The bank is several megabytes; the status only reports presets once it has loaded.
+    await expect(page.getByRole("status")).toContainText("presetów", { timeout: 60_000 });
+
+    await page.getByLabel("Plik XMI").setInputFiles({
+        name: "one.xmi",
+        mimeType: "application/octet-stream",
+        buffer: Buffer.from(file)
+    });
+    await page.getByRole("button", { name: "Odtwórz" }).click();
+
+    // The transport only advances if the audio graph is actually pulling the worklet.
+    await expect(page.getByText("start", { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect
+        .poll(async () => {
+            const text = await page.getByText(/^Pozycja:/).textContent();
+            return Number(text?.match(/tick\s+(\d+)/)?.[1] ?? 0);
+        }, { timeout: 15_000, message: "the position tick never advanced" })
+        .toBeGreaterThan(0);
+    await expect(page.locator(".error")).toHaveCount(0);
 });
 
 test("the vendored synthesizer renders finite samples through OfflineAudioContext", async ({ page }) => {

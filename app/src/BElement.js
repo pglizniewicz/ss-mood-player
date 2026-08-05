@@ -18,7 +18,9 @@ export default class BElement extends HTMLElement {
 
     triggerViewUpdate() {
         this.state = this.extractState(store.getState());
-        render(this.view(), this.getRenderTarget());
+        // `host` makes lit-html bind `this` inside event handlers to the component rather than to
+        // the element that received the event, so handlers can be plain methods.
+        render(this.view(), this.getRenderTarget(), { host: this });
     }
 
     /**
