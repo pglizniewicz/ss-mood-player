@@ -69,6 +69,38 @@ label {
     margin-block-end: var(--spacing-xs);
 }
 
+ol {
+    margin-block: 0;
+    padding-inline-start: var(--spacing-lg);
+
+    li {
+        margin-block-end: var(--spacing-xs);
+    }
+}
+
+table {
+    border-collapse: collapse;
+    inline-size: 100%;
+
+    caption {
+        margin-block-end: var(--spacing-sm);
+        color: var(--color-text-muted);
+        text-align: start;
+    }
+
+    th, td {
+        padding-block: var(--spacing-xs);
+        padding-inline: var(--spacing-sm);
+        border-block-end: 1px solid var(--color-border);
+        text-align: start;
+    }
+}
+
+.numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+
 button {
     padding-block: var(--spacing-sm);
     padding-inline: var(--spacing-md);
@@ -110,11 +142,8 @@ button {
 
 @container (min-width: 45rem) {
     b-player {
-        flex-direction: row;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
         align-items: start;
-
-        section {
-            flex: 1;
-        }
     }
 }

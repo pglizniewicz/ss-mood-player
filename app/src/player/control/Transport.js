@@ -11,13 +11,3 @@ export const engineStateChangedAction = createAction("engineStateChangedAction")
 export const engineStateChanged = (engine, message) => {
     store.dispatch(engineStateChangedAction({ engine, message }));
 };
-
-export const fileSelectedAction = createAction("fileSelectedAction");
-
-/**
- * @param {File} file the XMI file picked by the user
- * @returns {void}
- */
-export const fileSelected = ({ name, size }) => {
-    store.dispatch(fileSelectedAction({ name, size }));
-};

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { buildXmi } from "../fixtures/build-xmi.js";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/index.html");
@@ -14,6 +15,35 @@ test("starting the engine loads the worklet and reports readiness", async ({ pag
     await page.getByRole("button", { name: "Uruchom silnik" }).click();
     await expect(page.getByRole("status")).toHaveText(/silnik gotowy/, { timeout: 15_000 });
     await expect(page.locator(".error")).toHaveCount(0);
+});
+
+test("picking an XMI file lists its sequences and branch points", async ({ page }) => {
+    const file = buildXmi([
+        {
+            events: [
+                { type: "branch", index: 0 },
+                { type: "noteOn", channel: 3, note: 60, duration: 60 },
+                { delta: 240, type: "branch", index: 5 },
+                { delta: 240, type: "noteOn", channel: 3, note: 67, duration: 60 }
+            ]
+        },
+        { timeSignature: [3, 4], events: [{ type: "noteOn", channel: 9, note: 48, duration: 30 }] }
+    ]);
+
+    await page.getByLabel("Plik XMI").setInputFiles({
+        name: "mood.xmi",
+        mimeType: "application/octet-stream",
+        buffer: Buffer.from(file)
+    });
+
+    await expect(page.getByText("2 sekwencje w pliku")).toBeVisible();
+    await expect(page.getByRole("radio")).toHaveCount(2);
+    // First sequence: two branch marks at ticks 0 and 240, the second lands in bar 2.
+    await expect(page.getByRole("row")).toHaveCount(3);
+    await expect(page.getByRole("cell", { name: "240", exact: true })).toBeVisible();
+
+    await page.getByRole("radio").nth(1).check();
+    await expect(page.getByText("Ta sekwencja nie ma punktów skoku", { exact: false })).toBeVisible();
 });
 
 test("the vendored synthesizer renders finite samples through OfflineAudioContext", async ({ page }) => {
