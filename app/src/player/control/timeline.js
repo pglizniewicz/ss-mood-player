@@ -59,14 +59,16 @@ export const isSequencerController = controller =>
     controller >= XMIDI_CONTROLLER_FIRST && controller <= XMIDI_CONTROLLER_LAST;
 
 /**
+ * The tick-domain half of the expansion: this is where XMI's note durations become note-offs and
+ * where sequencer controllers are withheld. Kept separate from the sample mapping so the MIDI
+ * exporter, which has no sample rate, shares exactly this logic.
+ *
  * @param {import("./parse.js").XmiSequence} sequence the sequence to expand
- * @param {number} sampleRate the rate the synthesizer runs at
- * @returns {Timeline} everything needed to play the segment once
+ * @returns {{actions: Omit<Action, "sample">[], endTick: number, sequencerControllers: number[]}} the actions in ticks
  */
-export const expand = (sequence, sampleRate) => {
-    const samplesPerTick = sampleRate / TICK_RATE;
+export const expandTicks = sequence => {
     const endTick = sequence.loop?.endTick ?? sequence.durationTicks;
-    /** @type {Action[]} */
+    /** @type {Omit<Action, "sample">[]} */
     const actions = [];
     /** @type {Set<number>} */
     const sequencerControllers = new Set();
@@ -75,12 +77,11 @@ export const expand = (sequence, sampleRate) => {
         if (event.tick > endTick) break;
 
         if (event.type === "noteOn") {
-            actions.push(toAction(event, "noteOn", event.tick, samplesPerTick));
+            actions.push(toAction(event, "noteOn", event.tick));
             // Clamping the note-off keeps a long tail from hanging past the segment; the
             // transport also silences the channel when it leaves a segment.
             const offTick = Math.min(event.tick + (event.duration ?? 1), endTick);
             actions.push({
-                sample: Math.round(offTick * samplesPerTick),
                 tick: offTick,
                 type: "noteOff",
                 channel: event.channel,
@@ -90,7 +91,7 @@ export const expand = (sequence, sampleRate) => {
         }
 
         if (event.type === "noteOff") {
-            actions.push(toAction(event, "noteOff", event.tick, samplesPerTick));
+            actions.push(toAction(event, "noteOff", event.tick));
             continue;
         }
 
@@ -100,22 +101,34 @@ export const expand = (sequence, sampleRate) => {
         }
 
         if (PASSED_THROUGH.has(event.type)) {
-            actions.push(toAction(event, /** @type {ActionType} */ (event.type), event.tick, samplesPerTick));
+            actions.push(toAction(event, /** @type {ActionType} */ (event.type), event.tick));
         }
     }
 
-    actions.push({
-        sample: Math.round(endTick * samplesPerTick),
-        tick: endTick,
-        type: "segmentEnded"
-    });
+    actions.push({ tick: endTick, type: "segmentEnded" });
 
     return {
         actions: sort(actions),
         endTick,
+        sequencerControllers: [...sequencerControllers].toSorted((left, right) => left - right)
+    };
+};
+
+/**
+ * @param {import("./parse.js").XmiSequence} sequence the sequence to expand
+ * @param {number} sampleRate the rate the synthesizer runs at
+ * @returns {Timeline} everything needed to play the segment once
+ */
+export const expand = (sequence, sampleRate) => {
+    const samplesPerTick = sampleRate / TICK_RATE;
+    const { actions, endTick, sequencerControllers } = expandTicks(sequence);
+
+    return {
+        actions: actions.map(action => ({ ...action, sample: Math.round(action.tick * samplesPerTick) })),
+        endTick,
         endSample: Math.round(endTick * samplesPerTick),
         samplesPerTick,
-        sequencerControllers: [...sequencerControllers].toSorted((left, right) => left - right)
+        sequencerControllers
     };
 };
 
@@ -123,11 +136,9 @@ export const expand = (sequence, sampleRate) => {
  * @param {import("./events.js").XmiEvent} event the parsed event
  * @param {ActionType} type the action to emit
  * @param {number} tick where it happens
- * @param {number} samplesPerTick the conversion factor
- * @returns {Action} the action
+ * @returns {Omit<Action, "sample">} the action
  */
-const toAction = (event, type, tick, samplesPerTick) => ({
-    sample: Math.round(tick * samplesPerTick),
+const toAction = (event, type, tick) => ({
     tick,
     type,
     channel: event.channel,
@@ -136,14 +147,14 @@ const toAction = (event, type, tick, samplesPerTick) => ({
 });
 
 /**
- * @param {Action[]} actions the unsorted actions
- * @returns {Action[]} the same actions ordered by sample, then by what must happen first
+ * @param {Omit<Action, "sample">[]} actions the unsorted actions
+ * @returns {Omit<Action, "sample">[]} the same actions ordered by tick, then by what must happen first
  */
 const sort = actions =>
     actions
         .map((action, position) => ({ action, position }))
         .toSorted((left, right) =>
-            left.action.sample - right.action.sample ||
+            left.action.tick - right.action.tick ||
             (ORDER.get(left.action.type) ?? 1) - (ORDER.get(right.action.type) ?? 1) ||
             left.position - right.position)
         .map(({ action }) => action);

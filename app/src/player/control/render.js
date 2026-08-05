@@ -22,9 +22,18 @@ export const BLOCK = 128;
  * @param {number} [options.block] samples per synthesizer call
  * @param {(channel: number) => boolean} [options.playsChannel] lets a caller solo or mute
  *   channels, which is how a listener finds out which line is which
+ * @param {(channel: number) => number} [options.transposeBy] semitones to shift a channel by,
+ *   for testing whether a line was written where it sounds
  * @returns {{left: Float32Array, right: Float32Array}} the rendered audio
  */
-export const renderSegments = ({ synth, transport, totalSamples, block = BLOCK, playsChannel }) => {
+export const renderSegments = ({
+    synth,
+    transport,
+    totalSamples,
+    block = BLOCK,
+    playsChannel,
+    transposeBy
+}) => {
     // `process()` adds into the buffers rather than overwriting them, so every range must be
     // rendered exactly once into freshly zeroed arrays.
     const left = new Float32Array(totalSamples);
@@ -43,7 +52,7 @@ export const renderSegments = ({ synth, transport, totalSamples, block = BLOCK, 
                 written = target;
             }
             if (!playsChannel || action.channel === undefined || playsChannel(action.channel)) {
-                apply(action, synth);
+                apply(transposed(action, transposeBy), synth);
             }
         }
         if (written < size) synth.process(left, right, position + written, size - written);
@@ -51,6 +60,20 @@ export const renderSegments = ({ synth, transport, totalSamples, block = BLOCK, 
     }
 
     return { left, right };
+};
+
+const NOTE_ACTIONS = new Set(["noteOn", "noteOff"]);
+
+/**
+ * @param {import("./timeline.js").Action} action the action to play
+ * @param {((channel: number) => number) | undefined} transposeBy semitones per channel
+ * @returns {import("./timeline.js").Action} the action, shifted when asked
+ */
+const transposed = (action, transposeBy) => {
+    if (!transposeBy || action.channel === undefined || !NOTE_ACTIONS.has(action.type)) return action;
+    const semitones = transposeBy(action.channel);
+    if (semitones === 0) return action;
+    return { ...action, data1: Math.max(0, Math.min(127, (action.data1 ?? 0) + semitones)) };
 };
 
 /**

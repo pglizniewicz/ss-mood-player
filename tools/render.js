@@ -36,7 +36,7 @@ const parseArguments = argv => {
         return at === -1 ? undefined : argv[at + 1];
     };
     const [xmi, wav] = positional;
-    if (!xmi || !wav) throw new Error("usage: render.js <file.xmi> <out.wav> [--sequence N] [--seconds S] [--soundfont path] [--rate Hz] [--repeat] [--channels 9,10]");
+    if (!xmi || !wav) throw new Error("usage: render.js <file.xmi> <out.wav> [--sequence N] [--seconds S] [--soundfont path] [--rate Hz] [--repeat] [--channels 9,10] [--transpose 12:-1]");
 
     return {
         xmi,
@@ -49,7 +49,13 @@ const parseArguments = argv => {
         channels: flag("channels") === undefined
             ? undefined
             : new Set(String(flag("channels")).split(",").map(Number)),
-        then: flag("then") === undefined ? undefined : Number(flag("then"))
+        then: flag("then") === undefined ? undefined : Number(flag("then")),
+        transpose: flag("transpose") === undefined
+            ? undefined
+            : new Map(String(flag("transpose")).split(",").map(pair => {
+                const [channel, semitones] = pair.split(":").map(Number);
+                return [channel, semitones];
+            }))
     };
 };
 
@@ -122,7 +128,8 @@ const main = async () => {
         synth,
         transport,
         totalSamples,
-        playsChannel: options.channels ? channel => options.channels.has(channel) : undefined
+        playsChannel: options.channels ? channel => options.channels.has(channel) : undefined,
+        transposeBy: options.transpose ? channel => options.transpose.get(channel) ?? 0 : undefined
     });
     const elapsed = Number(process.hrtime.bigint() - started) / 1e9;
 
@@ -132,7 +139,7 @@ const main = async () => {
 
     console.log(`${options.xmi} sequence ${chosen}${sequence.name ? ` "${sequence.name}"` : ""}`);
     console.log(`  bank: ${options.soundfont ?? "built-in sample bank (single saw wave)"}`);
-    console.log(`  ${sequence.events.length} events, ${sequence.channels.length} channels [${sequence.channels}]${options.channels ? ` -> playing only [${[...options.channels]}]` : ""}`);
+    console.log(`  ${sequence.events.length} events, ${sequence.channels.length} channels [${sequence.channels}]${options.channels ? ` -> playing only [${[...options.channels]}]` : ""}${options.transpose ? ` -> transposed ${[...options.transpose].map(([c, t]) => `ch${c}:${t > 0 ? "+" : ""}${t}`).join(" ")}` : ""}`);
     console.log(`  loop ${sequence.loop ? `${sequence.loop.ticks} ticks` : "none"}, rendered ${seconds.toFixed(1)}s at ${options.rate} Hz`);
     console.log(`  ${options.wav} written in ${elapsed.toFixed(2)}s (${(seconds / elapsed).toFixed(1)}x realtime)`);
     printEnvelope(rmsWindows(left, right, options.rate));
