@@ -20,9 +20,11 @@ export const BLOCK = 128;
  * @param {object} options.transport the transport walking the timeline
  * @param {number} options.totalSamples how many samples to produce
  * @param {number} [options.block] samples per synthesizer call
+ * @param {(channel: number) => boolean} [options.playsChannel] lets a caller solo or mute
+ *   channels, which is how a listener finds out which line is which
  * @returns {{left: Float32Array, right: Float32Array}} the rendered audio
  */
-export const renderSegments = ({ synth, transport, totalSamples, block = BLOCK }) => {
+export const renderSegments = ({ synth, transport, totalSamples, block = BLOCK, playsChannel }) => {
     // `process()` adds into the buffers rather than overwriting them, so every range must be
     // rendered exactly once into freshly zeroed arrays.
     const left = new Float32Array(totalSamples);
@@ -40,7 +42,9 @@ export const renderSegments = ({ synth, transport, totalSamples, block = BLOCK }
                 synth.process(left, right, position + written, target - written);
                 written = target;
             }
-            apply(action, synth);
+            if (!playsChannel || action.channel === undefined || playsChannel(action.channel)) {
+                apply(action, synth);
+            }
         }
         if (written < size) synth.process(left, right, position + written, size - written);
         position += size;

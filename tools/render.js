@@ -36,7 +36,7 @@ const parseArguments = argv => {
         return at === -1 ? undefined : argv[at + 1];
     };
     const [xmi, wav] = positional;
-    if (!xmi || !wav) throw new Error("usage: render.js <file.xmi> <out.wav> [--sequence N] [--seconds S] [--soundfont path] [--rate Hz] [--repeat]");
+    if (!xmi || !wav) throw new Error("usage: render.js <file.xmi> <out.wav> [--sequence N] [--seconds S] [--soundfont path] [--rate Hz] [--repeat] [--channels 9,10]");
 
     return {
         xmi,
@@ -46,6 +46,9 @@ const parseArguments = argv => {
         soundfont: flag("soundfont") ?? process.env.SS_SOUNDFONT ?? DEFAULT_SOUNDFONT,
         rate: Number(flag("rate") ?? DEFAULT_RATE),
         repeat: argv.includes("--repeat"),
+        channels: flag("channels") === undefined
+            ? undefined
+            : new Set(String(flag("channels")).split(",").map(Number)),
         then: flag("then") === undefined ? undefined : Number(flag("then"))
     };
 };
@@ -115,7 +118,12 @@ const main = async () => {
         ?? ticksToSeconds(sequence.loop?.ticks ?? sequence.durationTicks) + followUp + 1;
     const totalSamples = Math.round(seconds * options.rate);
     const started = process.hrtime.bigint();
-    const { left, right } = renderSegments({ synth, transport, totalSamples });
+    const { left, right } = renderSegments({
+        synth,
+        transport,
+        totalSamples,
+        playsChannel: options.channels ? channel => options.channels.has(channel) : undefined
+    });
     const elapsed = Number(process.hrtime.bigint() - started) / 1e9;
 
     // Normalisation is on by default and would rescale every render to its own peak, which
@@ -124,7 +132,7 @@ const main = async () => {
 
     console.log(`${options.xmi} sequence ${chosen}${sequence.name ? ` "${sequence.name}"` : ""}`);
     console.log(`  bank: ${options.soundfont ?? "built-in sample bank (single saw wave)"}`);
-    console.log(`  ${sequence.events.length} events, ${sequence.channels.length} channels [${sequence.channels}]`);
+    console.log(`  ${sequence.events.length} events, ${sequence.channels.length} channels [${sequence.channels}]${options.channels ? ` -> playing only [${[...options.channels]}]` : ""}`);
     console.log(`  loop ${sequence.loop ? `${sequence.loop.ticks} ticks` : "none"}, rendered ${seconds.toFixed(1)}s at ${options.rate} Hz`);
     console.log(`  ${options.wav} written in ${elapsed.toFixed(2)}s (${(seconds / elapsed).toFixed(1)}x realtime)`);
     printEnvelope(rmsWindows(left, right, options.rate));
