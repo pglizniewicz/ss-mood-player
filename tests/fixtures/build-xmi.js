@@ -4,7 +4,8 @@
  *
  * @typedef {object} FixtureEvent
  * @property {number} [delta] ticks since the previous event, 0 by default
- * @property {"noteOn" | "controller" | "programChange" | "pitchWheel" | "branch" | "tempo"} type
+ * @property {"noteOn" | "controller" | "programChange" | "pitchWheel" | "branch" | "tempo"
+ *   | "loopStart" | "loopEnd" | "marker" | "trackName"} type
  * @property {number} [channel]
  * @property {number} [note]
  * @property {number} [velocity]
@@ -13,15 +14,19 @@
  * @property {number} [value]
  * @property {number} [program]
  * @property {number} [index] branch index
+ * @property {string} [text] marker or track name text
  *
  * @typedef {object} FixtureSequence
  * @property {FixtureEvent[]} events
  * @property {[number, number]} [timeSignature] numerator and denominator, 4/4 by default
+ * @property {number} [tempo] microseconds per quarter note, omitted from the file when absent
  * @property {{patch: number, bank: number}[]} [timbres]
  * @property {boolean} [omitBranchTable] emit controller 120 marks but no RBRN chunk
  */
 
 const SEQUENCE_BRANCH_INDEX = 120;
+const FOR_LOOP = 116;
+const NEXT_BREAK = 117;
 
 /**
  * XMI delta times are a run of bytes with the high bit clear which the sequencer sums,
@@ -56,6 +61,16 @@ const encodeVariableLength = value => {
 };
 
 /**
+ * @param {number} microseconds per quarter note
+ * @returns {number[]} the three big-endian bytes of a tempo meta event
+ */
+const tempoBytes = microseconds => [
+    (microseconds >>> 16) & 0xff,
+    (microseconds >>> 8) & 0xff,
+    microseconds & 0xff
+];
+
+/**
  * @param {FixtureEvent} event the event to encode
  * @returns {number[]} status byte and payload
  */
@@ -71,10 +86,16 @@ const encodeEvent = event => {
     }
     if (event.type === "controller") return [0xb0 | channel, event.controller ?? 7, event.value ?? 100];
     if (event.type === "branch") return [0xb0 | channel, SEQUENCE_BRANCH_INDEX, event.index ?? 0];
+    if (event.type === "loopStart") return [0xb0 | channel, FOR_LOOP, event.value ?? 0];
+    // A value of 127 means "loop back"; anything below 64 breaks out.
+    if (event.type === "loopEnd") return [0xb0 | channel, NEXT_BREAK, event.value ?? 127];
     if (event.type === "programChange") return [0xc0 | channel, event.program ?? 0];
     if (event.type === "pitchWheel") return [0xe0 | channel, 0x00, event.value ?? 0x40];
-    // A tempo meta event: present in real files as a leftover and expected to be ignored.
-    if (event.type === "tempo") return [0xff, 0x51, 0x03, 0x07, 0xa1, 0x20];
+    if (event.type === "tempo") return [0xff, 0x51, 0x03, ...tempoBytes(event.value ?? 500_000)];
+    if (event.type === "marker" || event.type === "trackName") {
+        const text = [...(event.text ?? "")].map(character => character.charCodeAt(0));
+        return [0xff, event.type === "marker" ? 0x06 : 0x03, text.length, ...text];
+    }
     throw new Error(`unsupported fixture event type ${event.type}`);
 };
 
@@ -107,7 +128,7 @@ const uint32LE = value => [...uint16LE(value & 0xffff), ...uint16LE((value >>> 1
  * @returns {{body: number[], branches: {index: number, offset: number}[]}} EVNT body and the
  *   byte offsets of its branch marks, relative to the body
  */
-const encodeEvents = ({ events, timeSignature = [4, 4] }) => {
+const encodeEvents = ({ events, timeSignature = [4, 4], tempo }) => {
     const [numerator, denominator] = timeSignature;
     const body = [
         0x00,
@@ -117,7 +138,8 @@ const encodeEvents = ({ events, timeSignature = [4, 4] }) => {
         numerator,
         Math.log2(denominator),
         24,
-        8
+        8,
+        ...(tempo === undefined ? [] : [0x00, 0xff, 0x51, 0x03, ...tempoBytes(tempo)])
     ];
     /** @type {{index: number, offset: number}[]} */
     const branches = [];

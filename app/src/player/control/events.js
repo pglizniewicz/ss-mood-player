@@ -6,18 +6,29 @@
  * note's duration in ticks instead of being paired with a note-off.
  *
  * @typedef {"noteOn" | "noteOff" | "polyPressure" | "controller" | "programChange"
- *   | "channelPressure" | "pitchWheel" | "sysEx" | "timeSignature" | "endOfTrack"} EventType
+ *   | "channelPressure" | "pitchWheel" | "sysEx" | "endOfTrack"} EventType
  *
  * @typedef {object} XmiEvent
  * @property {number} tick absolute tick, at 120 ticks per second
  * @property {number} offset byte offset of the event's status byte within the EVNT body
  * @property {EventType} type
- * @property {number} [channel] MIDI channel 0-15, absent on meta events
+ * @property {number} [channel] MIDI channel 0-15
  * @property {number} [data1] note, controller number or program
  * @property {number} [data2] velocity or controller value
  * @property {number} [duration] note length in ticks, note-on only
- * @property {number} [numerator] time signature only
- * @property {number} [denominator] time signature only, as a note value (4 = quarter)
+ *
+ * @typedef {object} Label
+ * @property {number} tick where the text sits
+ * @property {"text" | "trackName" | "marker"} kind which meta event carried it
+ * @property {string} text the text itself
+ *
+ * Meta events are kept out of the event stream: none of them is playable, and the scheduler
+ * should never have to skip over them.
+ *
+ * @typedef {object} SequenceMeta
+ * @property {number} [tempoMicroseconds] from the first tempo event; later ones are ignored
+ * @property {{numerator: number, denominator: number}} [timeSignature] from the first one found
+ * @property {Label[]} labels every text, track name and marker, in file order
  */
 
 const STATUS_MASK = 0xf0;
@@ -27,6 +38,13 @@ const SYSEX = 0xf0;
 const SYSEX_END = 0xf7;
 const META_END_OF_TRACK = 0x2f;
 const META_TIME_SIGNATURE = 0x58;
+const META_TEMPO = 0x51;
+
+const LABEL_TYPES = new Map([
+    [0x01, "text"],
+    [0x03, "trackName"],
+    [0x06, "marker"]
+]);
 
 const TWO_DATA_BYTES = new Map([
     [0x80, "noteOff"],
@@ -71,11 +89,13 @@ const streamEnd = (events, lastTick) =>
  * @param {DataView} view the file
  * @param {number} start first byte of the EVNT body
  * @param {number} end one past its last byte
- * @returns {{events: XmiEvent[], durationTicks: number}} the event stream
+ * @returns {{events: XmiEvent[], durationTicks: number, meta: SequenceMeta}} the event stream
  */
 export const readEvents = (view, start, end) => {
     /** @type {XmiEvent[]} */
     const events = [];
+    /** @type {SequenceMeta} */
+    const meta = { labels: [] };
     let offset = start;
     let tick = 0;
 
@@ -84,7 +104,7 @@ export const readEvents = (view, start, end) => {
         while (byte < 0x80) {
             tick += byte;
             offset += 1;
-            if (offset >= end) return { events, durationTicks: streamEnd(events, tick) };
+            if (offset >= end) return { events, durationTicks: streamEnd(events, tick), meta };
             byte = view.getUint8(offset);
         }
 
@@ -93,10 +113,24 @@ export const readEvents = (view, start, end) => {
         const parsed = readEvent(view, offset, byte, { tick, offset: statusOffset });
         offset = parsed.offset;
         if (parsed.event) events.push(parsed.event);
+        collect(meta, parsed.meta);
         if (parsed.event?.type === "endOfTrack") break;
     }
 
-    return { events, durationTicks: streamEnd(events, tick) };
+    return { events, durationTicks: streamEnd(events, tick), meta };
+};
+
+/**
+ * @param {SequenceMeta} meta the accumulator
+ * @param {Partial<SequenceMeta> | undefined} found what the last event contributed
+ * @returns {void}
+ */
+const collect = (meta, found) => {
+    if (!found) return;
+    // First tempo and first time signature win, matching how the AIL-era players behave.
+    meta.tempoMicroseconds ??= found.tempoMicroseconds;
+    meta.timeSignature ??= found.timeSignature;
+    if (found.labels) meta.labels.push(...found.labels);
 };
 
 /**
@@ -104,7 +138,8 @@ export const readEvents = (view, start, end) => {
  * @param {number} offset first byte after the status byte
  * @param {number} status the status byte
  * @param {{tick: number, offset: number}} position absolute tick and status byte offset
- * @returns {{event: XmiEvent | undefined, offset: number}} the event and the offset after it
+ * @returns {{event: XmiEvent | undefined, offset: number, meta?: Partial<SequenceMeta>}} the event,
+ *   the offset after it, and anything it contributes to the sequence metadata
  */
 const readEvent = (view, offset, status, position) => {
     if (status === META) return readMeta(view, offset, position);
@@ -169,7 +204,8 @@ const readEvent = (view, offset, status, position) => {
  * @param {DataView} view the file
  * @param {number} offset the meta type byte
  * @param {{tick: number, offset: number}} position absolute tick and status byte offset
- * @returns {{event: XmiEvent | undefined, offset: number}} the event and the offset after it
+ * @returns {{event: XmiEvent | undefined, offset: number, meta?: Partial<SequenceMeta>}} the event,
+ *   the offset after it, and anything it contributes to the sequence metadata
  */
 const readMeta = (view, offset, position) => {
     const metaType = view.getUint8(offset);
@@ -177,19 +213,50 @@ const readMeta = (view, offset, position) => {
     const after = dataStart + length;
 
     if (metaType === META_END_OF_TRACK) return { event: { ...position, type: "endOfTrack" }, offset: after };
+
     if (metaType === META_TIME_SIGNATURE) {
         return {
-            event: {
-                ...position,
-                type: "timeSignature",
-                numerator: view.getUint8(dataStart),
-                denominator: 2 ** view.getUint8(dataStart + 1)
-            },
-            offset: after
+            event: undefined,
+            offset: after,
+            meta: {
+                timeSignature: {
+                    numerator: view.getUint8(dataStart),
+                    denominator: 2 ** view.getUint8(dataStart + 1)
+                }
+            }
         };
     }
 
-    // Tempo meta events survive the conversion to XMI but are meaningless: the AIL
-    // sequencer runs at a fixed rate, so everything else is skipped deliberately.
+    // The tempo never changes playback speed — the sequencer clock is fixed — but it does set
+    // how many ticks a quarter note spans, which is the only way to place bars.
+    if (metaType === META_TEMPO) {
+        return {
+            event: undefined,
+            offset: after,
+            meta: {
+                tempoMicroseconds:
+                    (view.getUint8(dataStart) << 16) |
+                    (view.getUint8(dataStart + 1) << 8) |
+                    view.getUint8(dataStart + 2)
+            }
+        };
+    }
+
+    const labelKind = LABEL_TYPES.get(metaType);
+    if (labelKind) {
+        const bytes = new Uint8Array(view.buffer, view.byteOffset + dataStart, length);
+        return {
+            event: undefined,
+            offset: after,
+            meta: {
+                labels: [{
+                    tick: position.tick,
+                    kind: /** @type {"text" | "trackName" | "marker"} */ (labelKind),
+                    text: new TextDecoder("latin1").decode(bytes).trim()
+                }]
+            }
+        };
+    }
+
     return { event: undefined, offset: after };
 };

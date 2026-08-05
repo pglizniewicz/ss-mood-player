@@ -21,13 +21,15 @@ test("picking an XMI file lists its sequences and branch points", async ({ page 
     const file = buildXmi([
         {
             events: [
+                { type: "trackName", text: "keeper" },
                 { type: "branch", index: 0 },
                 { type: "noteOn", channel: 3, note: 60, duration: 60 },
                 { delta: 240, type: "branch", index: 5 },
                 { delta: 240, type: "noteOn", channel: 3, note: 67, duration: 60 }
             ]
         },
-        { timeSignature: [3, 4], events: [{ type: "noteOn", channel: 9, note: 48, duration: 30 }] }
+        { timeSignature: [3, 4], events: [{ type: "noteOn", channel: 9, note: 48, duration: 30 }] },
+        { events: [{ type: "marker", text: "theme1 SCMIDIfile" }] }
     ]);
 
     await page.getByLabel("Plik XMI").setInputFiles({
@@ -36,14 +38,18 @@ test("picking an XMI file lists its sequences and branch points", async ({ page 
         buffer: Buffer.from(file)
     });
 
-    await expect(page.getByText("2 sekwencje w pliku")).toBeVisible();
+    await expect(page.getByText("3 sekwencje w pliku")).toBeVisible();
+    // The marker-only stub is hidden until asked for.
     await expect(page.getByRole("radio")).toHaveCount(2);
-    // First sequence: two branch marks at ticks 0 and 240, the second lands in bar 2.
-    await expect(page.getByRole("row")).toHaveCount(3);
+    await expect(page.getByText("keeper")).toBeVisible();
+    await page.getByLabel("Pokaż 1 bez ani jednej nuty (same markery)").check();
+    await expect(page.getByRole("radio")).toHaveCount(3);
+
+    // Two branch marks, at ticks 0 and 240.
     await expect(page.getByRole("cell", { name: "240", exact: true })).toBeVisible();
 
     await page.getByRole("radio").nth(1).check();
-    await expect(page.getByText("Ta sekwencja nie ma punktów skoku", { exact: false })).toBeVisible();
+    await expect(page.getByText("Brak punktów skoku", { exact: false })).toBeVisible();
 });
 
 test("the vendored synthesizer renders finite samples through OfflineAudioContext", async ({ page }) => {

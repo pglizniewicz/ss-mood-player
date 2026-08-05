@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseXmi, ticksPerBar, ticksToSeconds } from "../../app/src/player/control/parse.js";
+import { parseXmi, ticksPerBar, ticksPerQuarter, ticksToSeconds, loopBars } from "../../app/src/player/control/parse.js";
 import { buildXmi } from "../fixtures/build-xmi.js";
 
 test("reads every sequence of the file with its declared metadata", () => {
@@ -89,6 +89,54 @@ test("falls back to controller 120 marks when the file has no branch table", () 
     const [{ branches, events }] = parseXmi(file).sequences;
 
     assert.deepEqual(branches.map(({ index, tick }) => ({ index, tick })), [{ index: 7, tick: 120 }]);
-    // Tempo meta events survive conversion to XMI but must not reach the event stream.
-    assert.deepEqual(events.map(({ type }) => type), ["timeSignature", "controller", "noteOn", "endOfTrack"]);
+    // Meta events carry no sound, so they stay out of the stream the scheduler walks.
+    assert.deepEqual(events.map(({ type }) => type), ["controller", "noteOn", "endOfTrack"]);
+});
+
+test("places bars from the tempo, so a loop lands on a whole number of them", () => {
+    // The numbers come from System Shock's THM1.XMI: 130 BPM, 6/4, a four-bar loop of 1329 ticks.
+    // At a fixed 120 Hz clock a quarter note spans 55.38 ticks, not the 60 a fixed PPQN implies.
+    const file = buildXmi([{
+        tempo: 461_538,
+        timeSignature: [6, 4],
+        events: [
+            { type: "loopStart" },
+            { type: "noteOn", channel: 9, note: 36, duration: 30 },
+            { delta: 1329, type: "loopEnd" }
+        ]
+    }]);
+
+    const [sequence] = parseXmi(file).sequences;
+
+    assert.equal(sequence.tempoMicroseconds, 461_538);
+    assert.ok(Math.abs(ticksPerQuarter(sequence) - 55.3846) < 0.001);
+    assert.ok(Math.abs(ticksPerBar(sequence) - 332.3077) < 0.001);
+    assert.deepEqual(
+        { startTick: sequence.loop.startTick, ticks: sequence.loop.ticks, repeats: sequence.loop.repeats },
+        { startTick: 0, ticks: 1329, repeats: 0 }
+    );
+    assert.equal(Math.round(loopBars(sequence)), 4);
+    assert.ok(Math.abs(loopBars(sequence) - 4) < 0.01);
+});
+
+test("reads labels and tells playable sequences from marker-only stubs", () => {
+    const file = buildXmi([
+        {
+            events: [
+                { type: "trackName", text: "keeper" },
+                { type: "noteOn", note: 60, duration: 60 }
+            ]
+        },
+        { events: [{ type: "marker", text: "theme1 SCMIDIfile" }] }
+    ]);
+
+    const [playable, stub] = parseXmi(file).sequences;
+
+    assert.equal(playable.name, "keeper");
+    assert.equal(playable.isPlayable, true);
+    assert.deepEqual(stub.labels, [{ tick: 0, kind: "marker", text: "theme1 SCMIDIfile" }]);
+    // 19 of the 50 sequences in THM1.XMI are stubs like this one; the UI has to separate them.
+    assert.equal(stub.isPlayable, false);
+    // Without a tempo event the file falls back to 120 BPM, the AIL-era default.
+    assert.equal(stub.tempoMicroseconds, 500_000);
 });

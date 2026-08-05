@@ -1,5 +1,5 @@
 import { readEvents } from "./events.js";
-import { branchesFromEvents, readBranches, resolveBranches } from "./branches.js";
+import { branchesFromEvents, readBranches, resolveBranches, FOR_LOOP, NEXT_BREAK } from "./branches.js";
 
 /**
  * Parses an XMI (XMIDI) file into its sequences.
@@ -9,6 +9,12 @@ import { branchesFromEvents, readBranches, resolveBranches } from "./branches.js
  * mandatory `EVNT` chunk. Chunk sizes are big-endian, payload fields little-endian. Files
  * without the directory wrapper are a single bare `FORM`/`XMID`.
  *
+ * @typedef {object} Loop
+ * @property {number} startTick where the FOR_LOOP controller sits
+ * @property {number} endTick where the NEXT_BREAK controller sits
+ * @property {number} ticks the loop's length, which is the sequence's musical length
+ * @property {number} repeats the loop count from the controller, 0 meaning endless
+ *
  * @typedef {object} XmiSequence
  * @property {number} index position of the sequence in the file
  * @property {import("./events.js").XmiEvent[]} events the event stream
@@ -16,6 +22,11 @@ import { branchesFromEvents, readBranches, resolveBranches } from "./branches.js
  * @property {{patch: number, bank: number}[]} timbres patches the sequence asks for
  * @property {number} durationTicks last tick in the stream
  * @property {{numerator: number, denominator: number}} timeSignature first one found, 4/4 by default
+ * @property {number} tempoMicroseconds per quarter note; sets the tick-to-bar ratio, not the speed
+ * @property {import("./events.js").Label[]} labels text, track name and marker events
+ * @property {string} name the first label's text, empty when the sequence carries none
+ * @property {Loop} [loop] the XMIDI loop, when the sequence declares one
+ * @property {boolean} isPlayable whether the sequence contains any note at all
  * @property {number[]} channels MIDI channels the sequence actually uses, ascending
  *
  * @typedef {object} XmiFile
@@ -26,8 +37,11 @@ import { branchesFromEvents, readBranches, resolveBranches } from "./branches.js
 const CHUNK_HEADER_SIZE = 8;
 const FORM_TYPE_SIZE = 4;
 const TICKS_PER_SECOND = 120;
-const TICKS_PER_QUARTER = 60;
+const MICROSECONDS_PER_SECOND = 1_000_000;
 const DEFAULT_TIME_SIGNATURE = { numerator: 4, denominator: 4 };
+
+/** What the AIL-era players assume when a file declares no tempo: 120 BPM. */
+const DEFAULT_TEMPO_MICROSECONDS = 500_000;
 
 /** Ticks per second of the AIL sequencer — PPQN 60 at 500 000 µs per quarter note. */
 export const TICK_RATE = TICKS_PER_SECOND;
@@ -106,14 +120,13 @@ const readSequence = (view, form, index) => {
     const evnt = chunk(chunks, "EVNT");
     if (!evnt) throw new Error(`sequence ${index} has no EVNT chunk`);
 
-    const { events, durationTicks } = readEvents(view, evnt.start, evnt.end);
+    const { events, durationTicks, meta } = readEvents(view, evnt.start, evnt.end);
     const rbrn = chunk(chunks, "RBRN");
     const declared = rbrn ? readBranches(view, rbrn.start, rbrn.end) : [];
     const branches = declared.length > 0
         ? resolveBranches(declared, events, evnt.start)
         : branchesFromEvents(events);
     const timb = chunk(chunks, "TIMB");
-    const signature = events.find(event => event.type === "timeSignature");
 
     return {
         index,
@@ -121,11 +134,35 @@ const readSequence = (view, form, index) => {
         branches,
         timbres: timb ? readTimbres(view, timb) : [],
         durationTicks,
-        timeSignature: signature
-            ? { numerator: signature.numerator ?? 4, denominator: signature.denominator ?? 4 }
-            : DEFAULT_TIME_SIGNATURE,
+        timeSignature: meta.timeSignature ?? DEFAULT_TIME_SIGNATURE,
+        tempoMicroseconds: meta.tempoMicroseconds ?? DEFAULT_TEMPO_MICROSECONDS,
+        labels: meta.labels,
+        name: meta.labels[0]?.text ?? "",
+        loop: loopOf(events),
+        isPlayable: events.some(event => event.type === "noteOn"),
         channels: [...new Set(events.map(event => event.channel).filter(channel => channel !== undefined))]
             .toSorted((left, right) => left - right)
+    };
+};
+
+/**
+ * The XMIDI loop spans the sequence's musical length: `FOR_LOOP` opens it and `NEXT_BREAK`
+ * closes it. The span is read, but never executed as an endless loop — System Shock's music
+ * engine relies on a sequence *ending* so it can queue the next one.
+ *
+ * @param {import("./events.js").XmiEvent[]} events the event stream
+ * @returns {Loop | undefined} the loop, when the sequence declares one
+ */
+const loopOf = events => {
+    const isController = number => event => event.type === "controller" && event.data1 === number;
+    const start = events.find(isController(FOR_LOOP));
+    const end = events.findLast(isController(NEXT_BREAK));
+    if (!start || !end || end.tick <= start.tick) return undefined;
+    return {
+        startTick: start.tick,
+        endTick: end.tick,
+        ticks: end.tick - start.tick,
+        repeats: start.data2 ?? 0
     };
 };
 
@@ -165,11 +202,28 @@ export const parseXmi = buffer => {
 };
 
 /**
+ * Ticks per quarter note follow from the tempo, not from a fixed PPQN: the sequencer clock is
+ * always 120 Hz, so a 130 BPM sequence puts 55.4 ticks in a quarter, not 60. Getting this wrong
+ * misplaces every bar line.
+ *
+ * @param {XmiSequence} sequence the sequence to measure
+ * @returns {number} ticks in one quarter note
+ */
+export const ticksPerQuarter = ({ tempoMicroseconds }) =>
+    (TICKS_PER_SECOND * tempoMicroseconds) / MICROSECONDS_PER_SECOND;
+
+/**
  * @param {XmiSequence} sequence the sequence to measure
  * @returns {number} ticks in one bar of the sequence's time signature
  */
-export const ticksPerBar = ({ timeSignature: { numerator, denominator } }) =>
-    (numerator * TICKS_PER_QUARTER * 4) / denominator;
+export const ticksPerBar = sequence =>
+    (sequence.timeSignature.numerator * ticksPerQuarter(sequence) * 4) / sequence.timeSignature.denominator;
+
+/**
+ * @param {XmiSequence} sequence the sequence to measure
+ * @returns {number} the loop's length in bars, 0 when it declares no loop
+ */
+export const loopBars = sequence => (sequence.loop ? sequence.loop.ticks / ticksPerBar(sequence) : 0);
 
 /**
  * @param {number} ticks a tick count

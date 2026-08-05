@@ -1,16 +1,19 @@
 import BElement from "../../BElement.js";
 import { html } from "lit-html";
-import { selectSequence } from "../control/Sequences.js";
-import { plural, seconds } from "../../format.js";
+import { selectSequence, toggleStubs } from "../control/Sequences.js";
+import { decimal, plural, seconds } from "../../format.js";
 
 class SequenceList extends BElement {
 
-    extractState({ player: { summaries, selectedSequence, declaredSequenceCount } }) {
-        return { summaries, selectedSequence, declaredSequenceCount };
+    extractState({ player: { summaries, selectedSequence, declaredSequenceCount, showStubs } }) {
+        return { summaries, selectedSequence, declaredSequenceCount, showStubs };
     }
 
     view() {
-        const { summaries, selectedSequence, declaredSequenceCount } = this.state;
+        const { summaries, selectedSequence, declaredSequenceCount, showStubs } = this.state;
+        const listed = showStubs ? summaries : summaries.filter(summary => summary.isPlayable);
+        const stubCount = summaries.length - summaries.filter(summary => summary.isPlayable).length;
+
         return html`
         <section aria-labelledby="sequences-heading">
         <h2 id="sequences-heading">Sekwencje</h2>
@@ -27,9 +30,17 @@ class SequenceList extends BElement {
                         ? html` (chunk INFO deklaruje ${declaredSequenceCount})`
                         : ""}
             </p>
-            <ol>
-                ${summaries.map(summary => this.row(summary, summary.index === selectedSequence))}
-            </ol>
+            ${stubCount > 0
+                ? html`
+                <label>
+                    <input type="checkbox" .checked="${showStubs}"
+                        @change="${({ target: { checked } }) => toggleStubs(checked)}">
+                    Pokaż ${stubCount} bez ani jednej nuty (same markery)
+                </label>`
+                : ""}
+            <ul>
+                ${listed.map(summary => this.row(summary, summary.index === selectedSequence))}
+            </ul>
             `}
         </section>
         `;
@@ -40,18 +51,29 @@ class SequenceList extends BElement {
      * @param {boolean} isSelected whether it is the sequence in focus
      * @returns {unknown} a lit-html template
      */
-    row({ index, durationSeconds, channels, branchIndices, numerator, denominator, eventCount }, isSelected) {
+    row(summary, isSelected) {
+        const { index, name, isPlayable, loopBars, loopSeconds, durationSeconds } = summary;
+        const { channels, branchIndices, numerator, denominator, tempoBpm } = summary;
         return html`
         <li>
             <label>
                 <input type="radio" name="sequence" value="${index}" .checked="${isSelected}"
                     @change="${() => selectSequence(index)}">
-                <span class="numeric">${seconds(durationSeconds)}</span> ·
-                ${numerator}/${denominator} ·
-                ${eventCount} ${plural(eventCount, { one: "zdarzenie", few: "zdarzenia", many: "zdarzeń" })} ·
+                <strong>${name || `sekwencja ${index}`}</strong>
+                ${isPlayable ? "" : html` <em>(bez nut)</em>`}
+                <br>
+                ${loopBars > 0
+                    ? html`<span class="numeric">pętla ${decimal(loopBars, 0)} ${plural(Math.round(loopBars), {
+                        one: "takt",
+                        few: "takty",
+                        many: "taktów"
+                    })} / ${seconds(loopSeconds)}</span> · `
+                    : html`<span class="numeric">${seconds(durationSeconds)}</span> · `}
+                ${numerator}/${denominator} · <span class="numeric">${decimal(tempoBpm, 0)} BPM</span> ·
                 ${plural(channels.length, { one: "kanał", few: "kanały", many: "kanały" })}
-                ${channels.join(", ") || "—"} ·
-                ${branchIndices.length} branch
+                ${channels.join(", ") || "—"}${branchIndices.length > 0
+                    ? html` · ${branchIndices.length} branch`
+                    : ""}
             </label>
         </li>
         `;

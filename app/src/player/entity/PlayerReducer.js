@@ -1,6 +1,11 @@
 import { createReducer } from "@reduxjs/toolkit";
 import { engineStateChangedAction } from "../control/Transport.js";
-import { fileFailedAction, fileLoadedAction, sequenceSelectedAction } from "../control/Sequences.js";
+import {
+    fileFailedAction,
+    fileLoadedAction,
+    sequenceSelectedAction,
+    stubsToggledAction
+} from "../control/Sequences.js";
 
 /**
  * @typedef {"idle" | "starting" | "ready" | "failed"} EngineState
@@ -14,6 +19,7 @@ import { fileFailedAction, fileLoadedAction, sequenceSelectedAction } from "../c
  * @property {number} declaredSequenceCount sequence count claimed by the INFO chunk
  * @property {import("../control/Sequences.js").SequenceSummary[]} summaries one per sequence
  * @property {number} selectedSequence position of the sequence in focus
+ * @property {boolean} showStubs whether sequences without a single note are listed
  */
 
 /** @type {PlayerState} */
@@ -25,7 +31,8 @@ const initialState = {
     fileError: "",
     declaredSequenceCount: 0,
     summaries: [],
-    selectedSequence: 0
+    selectedSequence: 0,
+    showStubs: false
 };
 
 export const player = createReducer(initialState, builder => {
@@ -38,7 +45,7 @@ export const player = createReducer(initialState, builder => {
         state.fileError = "";
         state.declaredSequenceCount = declaredSequenceCount;
         state.summaries = summaries;
-        state.selectedSequence = 0;
+        state.selectedSequence = summaries.find(summary => summary.isPlayable)?.index ?? 0;
     }).addCase(fileFailedAction, (state, { payload: { name, message } }) => {
         state.fileName = name;
         state.fileSize = 0;
@@ -47,5 +54,7 @@ export const player = createReducer(initialState, builder => {
         state.declaredSequenceCount = 0;
     }).addCase(sequenceSelectedAction, (state, { payload }) => {
         state.selectedSequence = payload;
+    }).addCase(stubsToggledAction, (state, { payload }) => {
+        state.showStubs = payload;
     });
 });

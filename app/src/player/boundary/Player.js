@@ -3,7 +3,7 @@ import { html } from "lit-html";
 import { loadFile } from "../control/Sequences.js";
 import { startEngine, sampleRate } from "./AudioOut.js";
 import "./SequenceList.js";
-import "./BranchMap.js";
+import "./Structure.js";
 
 const ENGINE_LABELS = {
     idle: "silnik nieuruchomiony",
@@ -39,7 +39,7 @@ class Player extends BElement {
             ${fileError ? html`<p class="error">${fileName}: ${fileError}</p>` : ""}
         </section>
         <b-player-sequences></b-player-sequences>
-        <b-player-branches></b-player-branches>
+        <b-player-structure></b-player-structure>
         `;
     }
 

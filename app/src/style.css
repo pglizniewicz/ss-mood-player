@@ -69,13 +69,21 @@ label {
     margin-block-end: var(--spacing-xs);
 }
 
-ol {
+ul {
     margin-block: 0;
-    padding-inline-start: var(--spacing-lg);
+    padding-inline-start: 0;
+    list-style: none;
 
     li {
-        margin-block-end: var(--spacing-xs);
+        margin-block-end: var(--spacing-sm);
     }
+}
+
+/* Real files hold dozens of sequences, so the list scrolls inside its panel instead of
+   pushing every other panel off the screen. */
+b-player-sequences ul {
+    max-block-size: 55dvh;
+    overflow-y: auto;
 }
 
 table {
