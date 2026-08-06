@@ -16,13 +16,13 @@ class Structure extends BElement {
 
         return html`
         <section aria-labelledby="structure-heading">
-        <h2 id="structure-heading">Struktura</h2>
+        <h2 id="structure-heading">Structure</h2>
         ${!selected
-            ? html`<p>Brak wczytanej sekwencji.</p>`
+            ? html`<p>No sequence loaded.</p>`
             : html`
             <p>
-                Sekwencja ${selectedSequence}, takt =
-                <span class="numeric">${decimal(ticksPerBar(selected))}</span> ticka
+                Sequence ${selectedSequence}, bar =
+                <span class="numeric">${decimal(ticksPerBar(selected))}</span> ticks
             </p>
             ${this.loop(selected)}
             ${this.branches(selected)}
@@ -36,27 +36,27 @@ class Structure extends BElement {
      * @returns {unknown} a lit-html template
      */
     loop({ loop, ...rest }) {
-        if (!loop) return html`<p>Bez pętli XMIDI — sekwencja gra raz i się kończy.</p>`;
+        if (!loop) return html`<p>No XMIDI loop — the sequence plays once and ends.</p>`;
         const bars = loopBars({ loop, ...rest });
         return html`
         <div class="scroller"><table>
-            <caption>Pętla XMIDI (kontrolery 116 / 117)</caption>
+            <caption>XMIDI loop (controllers 116 / 117)</caption>
             <tbody>
-                <tr><th scope="row">Początek</th><td class="numeric">tick ${loop.startTick}</td></tr>
-                <tr><th scope="row">Koniec</th><td class="numeric">tick ${loop.endTick}</td></tr>
+                <tr><th scope="row">Start</th><td class="numeric">tick ${loop.startTick}</td></tr>
+                <tr><th scope="row">End</th><td class="numeric">tick ${loop.endTick}</td></tr>
                 <tr>
-                    <th scope="row">Długość</th>
-                    <td class="numeric">${loop.ticks} ticków = ${decimal(bars, 2)} taktu / ${seconds(ticksToSeconds(loop.ticks), 2)}</td>
+                    <th scope="row">Length</th>
+                    <td class="numeric">${loop.ticks} ticks = ${decimal(bars, 2)} bars / ${seconds(ticksToSeconds(loop.ticks), 2)}</td>
                 </tr>
                 <tr>
-                    <th scope="row">Powtórzenia</th>
-                    <td>${loop.repeats === 0 ? "bez końca" : loop.repeats}</td>
+                    <th scope="row">Repeats</th>
+                    <td>${loop.repeats === 0 ? "endless" : loop.repeats}</td>
                 </tr>
             </tbody>
         </table></div>
         <p>
-            Pętli nie wykonujemy jako nieskończonej — w System Shocku segment musi się skończyć,
-            żeby silnik nastrojów mógł wybrać następny.
+            We do not execute the loop as endless — in System Shock a segment must end so the
+            mood engine can pick the next one.
         </p>
         `;
     }
@@ -69,17 +69,17 @@ class Structure extends BElement {
         if (selected.branches.length === 0) {
             return html`
             <p>
-                Brak punktów skoku (chunk <code>RBRN</code> / kontroler 120). Pliki System Shocka
-                zmieniają wariant osobnymi segmentami, nie skokami w środku utworu.
+                No branch points (chunk <code>RBRN</code> / controller 120). System Shock files
+                change variant with separate segments, not jumps within a track.
             </p>`;
         }
 
         const perBar = ticksPerBar(selected);
         return html`
         <div class="scroller"><table>
-            <caption>Punkty skoku</caption>
+            <caption>Branch points</caption>
             <thead>
-                <tr><th scope="col">Indeks</th><th scope="col">Tick</th><th scope="col">Takt</th><th scope="col">Czas</th></tr>
+                <tr><th scope="col">Index</th><th scope="col">Tick</th><th scope="col">Bar</th><th scope="col">Time</th></tr>
             </thead>
             <tbody>
                 ${selected.branches.map(({ index, tick = 0 }) => html`

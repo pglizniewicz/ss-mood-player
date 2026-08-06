@@ -39,7 +39,7 @@ const pickTheme = async (page, { withTables }) => {
         files.push({ name: "THM1.BIN", mimeType: "application/octet-stream", buffer: Buffer.from(TABLES) });
         files.push({ name: "THM1.DAT", mimeType: "application/octet-stream", buffer: Buffer.from(CHUNKS) });
     }
-    await page.getByLabel(/Pliki motywu/).setInputFiles(files);
+    await page.getByLabel(/Theme files/).setInputFiles(files);
 };
 
 test.beforeEach(async ({ page }) => {
@@ -48,53 +48,53 @@ test.beforeEach(async ({ page }) => {
 
 test("the page renders the player panels", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "ss-mood-player", level: 1 })).toBeVisible();
-    await expect(page.getByRole("status")).toHaveText(/silnik nieuruchomiony/);
-    await expect(page.getByLabel(/Pliki motywu/)).toBeVisible();
+    await expect(page.getByRole("status")).toHaveText(/engine not started/);
+    await expect(page.getByLabel(/Theme files/)).toBeVisible();
 });
 
 test("starting the engine loads the worklet and reports readiness", async ({ page }) => {
-    await page.getByRole("button", { name: "Uruchom silnik" }).click();
-    await expect(page.getByRole("status")).toHaveText(/silnik gotowy/, { timeout: 15_000 });
+    await page.getByRole("button", { name: "Start engine" }).click();
+    await expect(page.getByRole("status")).toHaveText(/engine ready/, { timeout: 15_000 });
     await expect(page.locator(".error")).toHaveCount(0);
 });
 
 test("an XMI without its score tables is listed but refuses to play", async ({ page }) => {
     await pickTheme(page, { withTables: false });
 
-    await expect(page.getByText("3 sekwencje w pliku")).toBeVisible();
+    await expect(page.getByText("3 sequences in the file")).toBeVisible();
     await expect(page.getByText("keeper")).toBeVisible();
     // The player says what is missing and why, instead of playing something unfaithful.
-    await expect(page.getByText("Wgraj tabele partytury", { exact: false })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Odtwórz partyturę" })).toBeDisabled();
+    await expect(page.getByText("Load the score tables", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Play score" })).toBeDisabled();
 });
 
 test("with the score tables the theme's intensity levels appear", async ({ page }) => {
     await pickTheme(page, { withTables: true });
 
-    await expect(page.getByRole("group", { name: /Partytura/ })).toBeVisible();
+    await expect(page.getByRole("group", { name: /Score/ })).toBeVisible();
     // Superchunks 0 and 1 are sequences 1 and 2, in keys 1 and 5.
     await expect(page.getByText("1 → 2 → 1 → 2")).toBeVisible();
-    await expect(page.getByText("tonacje 1,5,1,5")).toBeVisible();
+    await expect(page.getByText("keys 1,5,1,5")).toBeVisible();
 });
 
 test("plays a score's cycle through the worklet and moves between modules", async ({ page }) => {
-    await page.getByRole("button", { name: "Uruchom silnik" }).click();
+    await page.getByRole("button", { name: "Start engine" }).click();
     // The bank is several megabytes; the status only reports presets once it has loaded.
-    await expect(page.getByRole("status")).toContainText("presetów", { timeout: 60_000 });
+    await expect(page.getByRole("status")).toContainText("presets", { timeout: 60_000 });
 
     await pickTheme(page, { withTables: true });
-    await page.getByLabel(/Zapętl pojedynczy moduł/).uncheck();
-    await page.getByRole("button", { name: "Odtwórz partyturę" }).click();
+    await page.getByLabel(/Loop a single module/).uncheck();
+    await page.getByRole("button", { name: "Play score" }).click();
 
     // The transport only advances if the audio graph is actually pulling the worklet.
     await expect
         .poll(async () => {
-            const text = await page.getByText(/^Pozycja:/).textContent();
+            const text = await page.getByText(/^Position:/).textContent();
             return Number(text?.match(/tick\s+(\d+)/)?.[1] ?? 0);
         }, { timeout: 15_000, message: "the position tick never advanced" })
         .toBeGreaterThan(0);
     // Each module is 240 ticks, so within a few seconds the cycle must have moved on.
-    await expect(page.getByText("przełączono", { exact: false }).first())
+    await expect(page.getByText("switched", { exact: false }).first())
         .toBeVisible({ timeout: 20_000 });
     await expect(page.locator(".error")).toHaveCount(0);
 });

@@ -88,7 +88,7 @@ export const startEngine = async (bankUrl = BANK_URL) => {
     engineStateChanged("starting");
     context = new AudioContext();
     if (!context.audioWorklet) {
-        engineStateChanged("failed", "Ta przeglądarka nie udostępnia AudioWorklet — wymagane jest połączenie HTTPS (secure context).");
+        engineStateChanged("failed", "This browser does not offer AudioWorklet — an HTTPS connection (secure context) is required.");
         return;
     }
     unmute(context);

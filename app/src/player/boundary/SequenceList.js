@@ -29,18 +29,17 @@ class SequenceList extends BElement {
 
         return html`
         <section aria-labelledby="sequences-heading">
-        <h2 id="sequences-heading">Sekwencje</h2>
+        <h2 id="sequences-heading">Sequences</h2>
         ${summaries.length === 0
-            ? html`<p>Wgraj plik XMI, aby zobaczyć jego sekwencje.</p>`
+            ? html`<p>Load an XMI file to see its sequences.</p>`
             : html`
             <p>
                 ${summaries.length} ${plural(summaries.length, {
-                    one: "sekwencja",
-                    few: "sekwencje",
-                    many: "sekwencji"
-                })} w pliku${
+                    one: "sequence",
+                    other: "sequences"
+                })} in the file${
                     declaredSequenceCount > 0 && declaredSequenceCount !== summaries.length
-                        ? html` (chunk INFO deklaruje ${declaredSequenceCount})`
+                        ? html` (the INFO chunk declares ${declaredSequenceCount})`
                         : ""}
             </p>
             ${stubCount > 0
@@ -48,7 +47,7 @@ class SequenceList extends BElement {
                 <label>
                     <input type="checkbox" .checked="${showStubs}"
                         @change="${({ target: { checked } }) => toggleStubs(checked)}">
-                    Pokaż ${stubCount} bez ani jednej nuty (same markery)
+                    Show ${stubCount} without a single note (markers only)
                 </label>`
                 : ""}
             <ul>
@@ -72,18 +71,17 @@ class SequenceList extends BElement {
             <label>
                 <input type="radio" name="sequence" value="${index}" .checked="${isSelected}"
                     @change="${() => this.choose(index)}">
-                <strong>${name || `sekwencja ${index}`}</strong>
-                ${isPlayable ? "" : html` <em>(bez nut)</em>`}
+                <strong>${name || `sequence ${index}`}</strong>
+                ${isPlayable ? "" : html` <em>(no notes)</em>`}
                 <br>
                 ${loopBars > 0
-                    ? html`<span class="numeric">pętla ${decimal(loopBars, 0)} ${plural(Math.round(loopBars), {
-                        one: "takt",
-                        few: "takty",
-                        many: "taktów"
+                    ? html`<span class="numeric">loop ${decimal(loopBars, 0)} ${plural(Math.round(loopBars), {
+                        one: "bar",
+                        other: "bars"
                     })} / ${seconds(loopSeconds)}</span> · `
                     : html`<span class="numeric">${seconds(durationSeconds)}</span> · `}
                 ${numerator}/${denominator} · <span class="numeric">${decimal(tempoBpm, 0)} BPM</span> ·
-                ${plural(channels.length, { one: "kanał", few: "kanały", many: "kanały" })}
+                ${plural(channels.length, { one: "channel", other: "channels" })}
                 ${channels.join(", ") || "—"}${branchIndices.length > 0
                     ? html` · ${branchIndices.length} branch`
                     : ""}

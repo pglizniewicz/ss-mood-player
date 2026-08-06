@@ -4,11 +4,11 @@ import { changeSwitchWhen } from "../control/sequences.js";
 
 const KINDS = {
     started: "start",
-    requested: "zamówiono",
-    segmentEnded: "koniec segmentu",
-    switched: "przełączono",
-    repeated: "powtórzono",
-    stopped: "zatrzymano"
+    requested: "requested",
+    segmentEnded: "segment ended",
+    switched: "switched",
+    repeated: "repeated",
+    stopped: "stopped"
 };
 
 class DebugLog extends BElement {
@@ -21,15 +21,15 @@ class DebugLog extends BElement {
         const { log, switchWhen, positionTick, isPlaying } = this.state;
         return html`
         <section aria-labelledby="log-heading">
-            <h2 id="log-heading">Przebieg</h2>
+            <h2 id="log-heading">Log</h2>
             <fieldset>
-                <legend>Zmiana wariantu</legend>
-                ${this.option("atSegmentEnd", "na granicy pętli", switchWhen)}
-                ${this.option("now", "natychmiast", switchWhen)}
+                <legend>Variant switch</legend>
+                ${this.option("atSegmentEnd", "at loop boundary", switchWhen)}
+                ${this.option("now", "immediately", switchWhen)}
             </fieldset>
-            <p>Pozycja: <span class="numeric">tick ${positionTick}</span>${isPlaying ? "" : " (cisza)"}</p>
+            <p>Position: <span class="numeric">tick ${positionTick}</span>${isPlaying ? "" : " (silent)"}</p>
             ${log.length === 0
-                ? html`<p>Jeszcze nic nie zagrało.</p>`
+                ? html`<p>Nothing has played yet.</p>`
                 : html`
                 <ul class="log">
                     ${log.map(entry => html`
@@ -37,7 +37,7 @@ class DebugLog extends BElement {
                         <span class="numeric">${String(entry.tick).padStart(5)}</span>
                         ${KINDS[entry.kind] ?? entry.kind}
                         ${entry.sequence === undefined ? "" : html`seq ${entry.sequence}`}
-                        ${entry.from === undefined ? "" : html`z ${entry.from}`}
+                        ${entry.from === undefined ? "" : html`from ${entry.from}`}
                         ${entry.reason ? html`<em>${entry.reason}</em>` : ""}
                     </li>
                     `)}

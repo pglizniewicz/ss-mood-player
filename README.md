@@ -1,149 +1,156 @@
 # ss-mood-player
 
-Player plików **XMI** (XMIDI, format Miles/AIL) z przełączaniem wariantu muzycznego w trakcie
-odtwarzania — inspirowany silnikiem muzyki dynamicznej System Shocka 1 z portu
-[Shockolate](https://github.com/Interrupt/systemshock).
+An **XMI** file player (XMIDI, the Miles/AIL format) with variant switching during playback —
+inspired by the dynamic music engine of System Shock 1 in the
+[Shockolate](https://github.com/Interrupt/systemshock) port.
 
-XMI to nie MIDI: zdarzenie note-on niesie **czas trwania** zamiast osobnego note-off, czas jest
-kodowany „interval bytes", zegar jest stały (PPQN 60 + tempo 500 000 µs/qn = 120 ticków/s), a
-przejścia między nastrojami opierają się na chunku `RBRN` i kontrolerze XMIDI 120
-(*sequence branch index*). Parser jest więc częścią tego projektu, nie zależnością.
+XMI is not MIDI: a note-on event carries **duration** instead of a separate note-off, time is
+encoded as "interval bytes", the clock is fixed (PPQN 60 + tempo 500,000 µs/qn = 120 ticks/s),
+and transitions between moods rely on the `RBRN` chunk and XMIDI controller 120 (*sequence
+branch index*). The parser is therefore part of this project, not a dependency.
 
-## Uruchomienie
+## Running it
 
 ```bash
 npm run serve       # http://127.0.0.1:3000
 ```
 
-Aplikacja w `app/src` **nie ma builda ani zależności runtime instalowanych przez npm** — biblioteki
-są zwendorowane jako samodzielne moduły ESM w `app/src/libs/` i mapowane przez import map w
-`index.html`. `npm install` w katalogu głównym dotyczy wyłącznie narzędzi deweloperskich
-(Playwright, TypeScript do sprawdzania typów z JSDoc).
+The application in `app/src` **has no build step and no runtime dependencies installed by
+npm** — its libraries are vendored as self-contained ESM modules in `app/src/libs/` and mapped
+through an import map in `index.html`. `npm install` at the repo root is only for development
+tooling (Playwright, TypeScript for JSDoc type-checking).
 
-## Testy
+## Tests
 
 ```bash
-npm test            # node --test: parser, timeline, transport, golden RMS, architektura BCE
-npm run typecheck   # tsc --checkJs na JSDoc, bez transpilacji
-npm run test:e2e    # Playwright + Chromium: worklet, bank, transport w przeglądarce
+npm test            # node --test: parser, timeline, transport, golden RMS, BCE architecture
+npm run typecheck   # tsc --checkJs over JSDoc, no transpilation
+npm run test:e2e    # Playwright + Chromium: worklet, bank, transport in the browser
 ```
 
-## Render offline (narzędzie debugowania)
+## Offline render (a debugging tool)
 
 ```bash
 npm run render -- data/THM1.XMI /tmp/out.wav --sequence 9
-npm run render -- data/THM1.XMI /tmp/out.wav --sequence 9 --then 17   # przełączenie na granicy pętli
+npm run render -- data/THM1.XMI /tmp/out.wav --sequence 9 --then 17   # switch at the loop boundary
 ```
 
-Wypisuje tabelę RMS w okienkach 100 ms i log transportu, więc słychać *i widać*, co się stało —
-bez przeglądarki i bez karty dźwiękowej. Renderuje ~30× szybciej niż realtime i używa dokładnie
-tego samego kodu (`timeline.js`, `transport.js`, `dispatch.js`, `render.js`) co worklet, więc jego
-wynik jest dowodem na temat prawdziwej ścieżki odtwarzania. Bez `--soundfont` bierze bank z repo;
-`--soundfont ""` nie jest obsługiwane, ale gdy plik nie istnieje, można wskazać własny.
+Prints an RMS table in 100 ms windows and the transport log, so you can hear *and see* what
+happened — no browser, no sound card. Renders ~30× faster than real time and uses exactly the
+same code (`timeline.js`, `transport.js`, `dispatch.js`, `render.js`) as the worklet, so its
+output is evidence about the real playback path. Without `--soundfont` it takes the bank from
+the repo; `--soundfont ""` is not supported, but when the file does not exist you can point it
+at your own.
 
 ## SoundFont
 
-W repo jest **GeneralUser GS 2.0.3** w formacie SF3 (`app/src/assets/GeneralUserGS.sf3`,
-8 423 728 B, sha256 `e2ed326f…`), autorstwa **S. Christiana Collinsa**. Licencja *GeneralUser GS
-License v2.0* jest permisywna, zezwala na użycie komercyjne i modyfikacje, a autor **wprost prosi**,
-by nie linkować do jego plików, lecz hostować własną kopię — dokładnie to robimy. Pełny tekst
-licencji leży obok banku w `GeneralUserGS-LICENSE.txt`.
+The repo ships **GeneralUser GS 2.0.3** in SF3 format (`app/src/assets/GeneralUserGS.sf3`,
+8,423,728 bytes, sha256 `e2ed326f…`), by **S. Christian Collins**. The *GeneralUser GS License
+v2.0* is permissive, allows commercial use and modification, and the author **explicitly asks**
+that you not link to their files but host your own copy — which is exactly what we do. The full
+license text sits next to the bank in `GeneralUserGS-LICENSE.txt`.
 
-Kopia pochodzi z repozytorium SpessaSynth (konwersja SF2 → SF3 tego samego banku), dlatego jej
-wewnętrzne pole `INAM` mówi „GeneralUser GS 2.0.3 BETA". Bank jest domyślny, nie jedyny — w UI
-można wgrać własny SF2/SF3/DLS.
+This copy comes from the SpessaSynth repository (an SF2 → SF3 conversion of the same bank), which
+is why its internal `INAM` field says "GeneralUser GS 2.0.3 BETA". The bank is the default, not
+the only one — the UI lets you upload your own SF2/SF3/DLS.
 
-## Architektura
+## Architecture
 
-Boundary–Control–Entity, jeden business component `player` (`app/src/player/`). Kierunek zależności
-— boundary → control → entity — jest **wymuszony testem** (`tests/unit/architecture.test.js`):
-`control/` i `entity/` nie mogą sięgać do `boundary/` ani do Web Audio. Dzięki temu parser,
-scheduler i maszyna stanów wariantów działają pod `node --test`, bez przeglądarki.
+Boundary–Control–Entity, one business component `player` (`app/src/player/`). The dependency
+direction — boundary → control → entity — is **enforced by a test**
+(`tests/unit/architecture.test.js`): `control/` and `entity/` may not reach into `boundary/` or
+Web Audio. That is what lets the parser, scheduler, and variant state machine run under
+`node --test`, without a browser.
 
-Web Audio dotyka wyłącznie `player/boundary/AudioOut.js`. Syntezator (`spessasynth_core`) jest
-sterowany nuta po nucie z naszego własnego timeline'u — nie dostaje pliku, bo żaden sekwencer MIDI
-nie modeluje ani czasów trwania XMI, ani skoków po branch pointach.
+Web Audio is touched only by `player/boundary/AudioOut.js`. The synthesizer (`spessasynth_core`)
+is driven note by note from our own timeline — it is never handed a file, because no MIDI
+sequencer models either XMI durations or branch-point jumps.
 
-## Dane
+## Data
 
-Pliki XMI **nie są** w repozytorium (prawa autorskie do danych System Shocka). Wrzuć własne do
-`data/` — ten katalog jest w `.gitignore`. Testy automatyczne używają generowanych fikstur.
+XMI files are **not** in this repository (the data is copyrighted to System Shock). Drop your
+own into `data/` — that directory is in `.gitignore`. The automated tests use generated fixtures.
 
-## Player wymaga całego motywu, nie tylko XMI
+## The player requires the whole theme, not just the XMI
 
-**Sam plik XMI nie wystarcza do wiernego odtworzenia.** To bank czterotaktowych modułów w kilku
-tonacjach; kolejność, w jakiej mają grać, siedzi w plikach obok:
+**The XMI file alone is not enough for faithful playback.** It is a bank of four-bar modules in
+several keys; the order they are meant to play in lives in the files next to it:
 
-| plik | rola | wymagany |
+| file | role | required |
 |---|---|---|
-| `THMn.XMI` | moduły muzyczne (u nas 50 sekwencji) | tak |
-| `THMn.BIN` | tabele partytury — 405 B | **tak** |
-| `THMn.DAT` | opis modułów: takty, maski kanałów — 786 B | opcjonalny |
+| `THMn.XMI` | music modules (50 sequences in our data) | yes |
+| `THMn.BIN` | score tables — 405 B | **yes** |
+| `THMn.DAT` | module descriptions: bar counts, channel masks — 786 B | optional |
 
-Zaznacz wszystkie naraz w polu „Pliki motywu". Bez `BIN` player **odmawia gry** i mówi dlaczego,
-zamiast odtwarzać coś, co nie brzmi jak gra.
+Select all of them at once in the "Theme files" field. Without `BIN` the player **refuses to
+play** and says why, instead of playing something that does not sound like the game.
 
-Format `BIN` odczytałem z `MacTune.c` w Shockolate, które wczytuje te same bajty do
-`track_table[8][4]`, `transition_table[9]`, `layering_table[32][10]` i `key_table[22][2]` — co ze
-stałymi z `mlimbs.h` daje dokładnie 405 bajtów. Superchunk `k` gra sekwencja XMI `k+1`
-(w `musicai.c`: `track = 1 + piece_ID`), a `key_table` podaje tonację każdego modułu i zgadza się
-z tonacją wyliczoną z samych nut — na tym stoi test w `tests/unit/score.test.js`.
+I read the `BIN` format from `MacTune.c` in Shockolate, which loads the same bytes into
+`track_table[8][4]`, `transition_table[9]`, `layering_table[32][10]`, and `key_table[22][2]` —
+which, together with the constants from `mlimbs.h`, add up to exactly 405 bytes. Superchunk `k`
+plays XMI sequence `k+1` (in `musicai.c`: `track = 1 + piece_ID`), and `key_table` gives the key
+of every module, matching the key worked out from the notes themselves — that is what
+`tests/unit/score.test.js` asserts.
 
-Co ustaliliśmy o `THM1.XMI` (CRC32 `e5732a74`, bit w bit plik z retailowego `SOUND/GENMIDI/`):
-50 czterotaktowych modułów w siedmiu grupach tonalnych, numeracja programów **General MIDI**
-(gra wozi jeden zestaw `THM*.XMI` plus `INI-MT.XMI` i `INI-SC.XMI` — różni się tylko
-inicjalizacja urządzenia), kanał 9 to perkusja GM.
+What we established about `THM1.XMI` (CRC32 `e5732a74`, byte-for-byte the retail
+`SOUND/GENMIDI/` file): 50 four-bar modules across seven key groups, **General MIDI** program
+numbering (the game ships one set of `THM*.XMI` plus `INI-MT.XMI` and `INI-SC.XMI` — only the
+device initialization differs), channel 9 is GM percussion.
 
-Render partytury z linii poleceń:
+Render a score from the command line:
 
 ```bash
 npm run render -- data/THM1.XMI /tmp/score6.wav --score 6 --seconds 46
 ```
 
-Eksport do standardowego MIDI, gdy trzeba sprawdzić nuty w innym narzędziu:
+Export to standard MIDI, for checking the notes in another tool:
 
 ```bash
 node tools/export-midi.js data/THM1.XMI /tmp/seq9.mid --sequence 9
 ```
 
-## Konwencje
+## Conventions
 
-Projekt stosuje zwendorowane skille [airails](https://github.com/AdamBien/airails) z
-`.claude/skills/` (`web-components`, `web-conventions`, `javascript-conventions`, `bce`) oraz
-`DESIGN.md`. Świadome odstępstwa:
+The project uses the vendored [airails](https://github.com/AdamBien/airails) skills from
+`.claude/skills/` (`web-components`, `web-conventions`, `javascript-conventions`, `bce`) plus a
+`DESIGN.md`. Deliberate deviations:
 
-- **Relatywne URL-e zamiast root-absolute.** Skill `web-components` wymaga `/style.css` itd. na
-  potrzeby fallbacku `index.html` przy routingu. Ta aplikacja to jeden ekran bez routera, więc
-  fallback nie występuje, a relatywne ścieżki są konieczne, by działała na GitHub Pages pod
-  podkatalogiem `/ss-mood-player/`.
-- **Import w worklecie jest relatywny.** Import maps nie obowiązują w `AudioWorkletGlobalScope`,
-  więc `worklet/SynthProcessor.js` adresuje `../libs/spessasynth_core.js` ścieżką.
-- **`node --test` obok Playwrighta.** Skill wymienia tylko testy e2e; parser binarny potrzebuje
-  testów jednostkowych, a wbudowany runner Node nie dodaje żadnej zależności.
-- **Brak `tokens.json`.** `web-conventions` zabrania formatu DTCG i uznaje CSS custom properties za
-  źródło prawdy, więc tokeny żyją w `app/src/tokens.css`, a intencja projektowa w `DESIGN.md`.
-- **Testy e2e tylko na Chromium.** Skill wymaga też Firefoksa i WebKita; w tym środowisku
-  zainstalowany jest wyłącznie Chromium.
-- **`npm run serve` wywołuje zws przez `java --source 25`** (zws jest jednoplikowym skryptem
-  Javy 25). Serwer wypisuje `HeadlessException`, bo nie może otworzyć przeglądarki bez X11 — to
-  kosmetyczne, pliki serwuje dalej.
+- **Relative URLs instead of root-absolute.** The `web-components` skill requires `/style.css`
+  and the like to support an `index.html` routing fallback. This app is a single screen with no
+  router, so no fallback exists, and relative paths are what let it run on GitHub Pages under
+  the `/ss-mood-player/` subdirectory.
+- **The worklet's import is relative.** Import maps do not apply inside
+  `AudioWorkletGlobalScope`, so `worklet/SynthProcessor.js` addresses `../libs/spessasynth_core.js`
+  by path.
+- **`node --test` alongside Playwright.** The skill only calls for e2e tests; the binary parser
+  needs unit tests, and Node's built-in runner adds no dependency to get them.
+- **No `tokens.json`.** `web-conventions` forbids the DTCG format and treats CSS custom
+  properties as the source of truth, so tokens live in `app/src/tokens.css` and the design intent
+  in `DESIGN.md`.
+- **E2e tests run on Chromium only.** The skill also calls for Firefox and WebKit; only Chromium
+  is installed in this environment.
+- **`npm run serve` invokes zws via `java --source 25`** (zws is a single-file Java 25 script).
+  The server prints a `HeadlessException` because it cannot open a browser without X11 — that is
+  cosmetic; it still serves the files.
 
-## Uwaga o zwendorowanym silniku
+## A note on the vendored engine
 
-`spessasynth_core.js` to **jeden samowystarczalny plik ESM bez ani jednego importu** — dlatego
-nadaje się do zwendorowania bez bundlera. Ma natomiast wkompilowany dekoder Vorbisa (stb_vorbis
-jako WebAssembly w data-URI), potrzebny do banków SF3. Nic nie dociąga z sieci i działa tak samo
-w Node i w AudioWorklecie, ale to znaczy, że **przed pierwszą nutą trzeba poczekać na
-`processorInitialized`**: bank SF3 dekodowany przed gotowością dekodera daje ciszę i zapamiętuje ją
-na stałe. Worklet kolejkuje żądanie odtwarzania, dopóki nie jest gotowy.
+`spessasynth_core.js` is **one self-contained ESM file with not a single import** — which is
+what makes it vendorable without a bundler. It does, however, embed a Vorbis decoder (stb_vorbis
+as WebAssembly in a data URI), needed for SF3 banks. It fetches nothing over the network and
+behaves the same in Node and in an AudioWorklet, but that means **you must wait for
+`processorInitialized` before the first note**: an SF3 bank decoded before the decoder is ready
+produces silence and remembers it permanently. The worklet queues a play request until it is
+ready.
 
 ## Status
 
-- **M0** — scaffold, zwendorowane biblioteki, plumbing audio, CI.
-- **M1 / M1a** — parser XMI (kontener IFF, interval bytes, czasy trwania nut, `RBRN`, pętle
-  `116`/`117`, tempo, nazwy, zaślepki), zweryfikowany na prawdziwym THM1.XMI.
-- **M2** — timeline (note-offy z czasów trwania, tick→sample), transport (kwantyzacja zmiany
-  wariantu do granicy pętli, event log), SoundFont, `tools/render.js`, golden testy na obwiedni
-  RMS i **słyszalny dźwięk w przeglądarce**.
+- **M0** — scaffold, vendored libraries, audio plumbing, CI.
+- **M1 / M1a** — XMI parser (IFF container, interval bytes, note durations, `RBRN`, `116`/`117`
+  loops, tempo, names, stubs), verified against a real THM1.XMI.
+- **M2** — timeline (note-offs from durations, tick→sample), transport (quantizing variant
+  switches to the loop boundary, event log), SoundFont, `tools/render.js`, golden tests on the
+  RMS envelope, and **audible sound in the browser**.
 
-Dalej: silnik nastrojów w stylu `mlimbs` (M3), mikser warstw kanałów (M4), PWA i deploy (M5).
+Next: a mood engine in the style of `mlimbs` (M3), a channel-layer mixer (M4), PWA and deploy
+(M5).

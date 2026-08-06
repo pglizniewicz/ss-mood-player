@@ -18,19 +18,19 @@ class Theme extends BElement {
         const { fileName, fileSize, fileError, scoreName, scoreError, hasChunkTable, scores } = this.state;
         return html`
         <section aria-labelledby="theme-heading">
-            <h2 id="theme-heading">Motyw</h2>
-            <label for="theme">Pliki motywu — <code>THMn.XMI</code>, <code>THMn.BIN</code> i <code>THMn.DAT</code></label>
+            <h2 id="theme-heading">Theme</h2>
+            <label for="theme">Theme files — <code>THMn.XMI</code>, <code>THMn.BIN</code> and <code>THMn.DAT</code></label>
             <input id="theme" type="file" multiple accept=".xmi,.bin,.dat,.XMI,.BIN,.DAT"
                 @change="${this.pickTheme}">
-            <p>Zaznacz wszystkie trzy naraz. Możesz też wybrać je w kilku turach.</p>
+            <p>Select all three at once. You can also pick them in separate rounds.</p>
 
             <ul class="checklist">
-                <li>${this.item(fileName !== "" && fileError === "", "XMI (moduły)", fileName, fileError)}</li>
-                <li>${this.item(scores.length > 0, "BIN (tabele partytury)", scoreName, scoreError)}</li>
-                <li>${this.item(hasChunkTable, "DAT (opis modułów)", hasChunkTable ? "wczytany" : "brak — opcjonalny", "")}</li>
+                <li>${this.item(fileName !== "" && fileError === "", "XMI (modules)", fileName, fileError)}</li>
+                <li>${this.item(scores.length > 0, "BIN (score tables)", scoreName, scoreError)}</li>
+                <li>${this.item(hasChunkTable, "DAT (module descriptions)", hasChunkTable ? "loaded" : "missing — optional", "")}</li>
             </ul>
 
-            ${fileName && !fileError ? html`<p>${fileName} — ${fileSize} bajtów</p>` : ""}
+            ${fileName && !fileError ? html`<p>${fileName} — ${fileSize} bytes</p>` : ""}
             ${fileError ? html`<p class="error">${fileName}: ${fileError}</p>` : ""}
             ${scoreError ? html`<p class="error">${scoreName}: ${scoreError}</p>` : ""}
         </section>

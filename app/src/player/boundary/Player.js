@@ -9,10 +9,10 @@ import "./Structure.js";
 import "./DebugLog.js";
 
 const ENGINE_LABELS = {
-    idle: "silnik nieuruchomiony",
-    starting: "uruchamianie…",
-    ready: "silnik gotowy",
-    failed: "błąd silnika"
+    idle: "engine not started",
+    starting: "starting…",
+    ready: "engine ready",
+    failed: "engine failed"
 };
 
 const MEGABYTE = 1024 * 1024;
@@ -27,19 +27,19 @@ class Player extends BElement {
         const { engine, engineMessage } = this.state;
         return html`
         <section aria-labelledby="transport-heading">
-            <h2 id="transport-heading">Odtwarzanie</h2>
+            <h2 id="transport-heading">Playback</h2>
             <p role="status">${this.status()}</p>
             ${engineMessage ? html`<p class="error">${engineMessage}</p>` : ""}
             <div class="controls">
                 <button type="button" @click="${() => startEngine()}"
                     ?disabled="${engine === "ready" || engine === "starting"}">
-                    Uruchom silnik
+                    Start engine
                 </button>
                 <button type="button" @click="${() => this.playScore()}" ?disabled="${!this.canPlay()}">
-                    Odtwórz partyturę
+                    Play score
                 </button>
                 <button type="button" @click="${stop}" ?disabled="${!this.state.isPlaying}">
-                    Zatrzymaj
+                    Stop
                 </button>
             </div>
             ${this.canPlay() ? "" : html`
@@ -50,9 +50,9 @@ class Player extends BElement {
             <label>
                 <input type="checkbox" .checked="${this.state.repeatSegment}"
                     @change="${({ target: { checked } }) => repeatToggled(checked)}">
-                Zapętl pojedynczy moduł, zamiast iść dalej cyklem partytury
+                Loop a single module instead of following the score's cycle
             </label>
-            <label for="bank">Własny SoundFont (opcjonalnie)</label>
+            <label for="bank">Custom SoundFont (optional)</label>
             <input id="bank" type="file" accept=".sf2,.sf3,.dls" @change="${this.pickBank}">
         </section>
         <b-player-theme></b-player-theme>
@@ -66,11 +66,11 @@ class Player extends BElement {
     status() {
         const { engine, bankLoaded, bankTotal, bankPresets, isPlaying, playingSequence } = this.state;
         if (engine === "ready" && bankPresets === 0 && bankTotal > 0) {
-            return html`ładowanie banku — ${(bankLoaded / MEGABYTE).toFixed(1)} z ${(bankTotal / MEGABYTE).toFixed(1)} MB`;
+            return html`loading sound bank — ${(bankLoaded / MEGABYTE).toFixed(1)} of ${(bankTotal / MEGABYTE).toFixed(1)} MB`;
         }
         if (engine === "ready" && bankPresets > 0) {
-            return html`${ENGINE_LABELS[engine]} — ${sampleRate()} Hz, ${bankPresets} presetów${
-                isPlaying ? html` · gra moduł ${playingSequence}` : ""}`;
+            return html`${ENGINE_LABELS[engine]} — ${sampleRate()} Hz, ${bankPresets} presets${
+                isPlaying ? html` · playing module ${playingSequence}` : ""}`;
         }
         return ENGINE_LABELS[engine];
     }
@@ -91,12 +91,12 @@ class Player extends BElement {
         const { engine, bankPresets, bankTotal, summaries, scores } = this.state;
         return [
             engine !== "ready"
-                ? "Uruchom silnik — audio w przeglądarce startuje tylko z gestu użytkownika."
+                ? "Start the engine — audio in the browser only starts from a user gesture."
                 : "",
-            engine === "ready" && bankPresets === 0 && bankTotal > 0 ? "Bank dźwięków jeszcze się ładuje." : "",
-            summaries.length === 0 ? "Wgraj plik XMI z modułami muzycznymi." : "",
+            engine === "ready" && bankPresets === 0 && bankTotal > 0 ? "The sound bank is still loading." : "",
+            summaries.length === 0 ? "Load an XMI file with music modules." : "",
             scores.length === 0
-                ? "Wgraj tabele partytury (THMn.BIN). Bez nich nie wiadomo, w jakiej kolejności grać moduły — sam XMI to bank czterotaktowych fragmentów w kilku tonacjach, a kolejność siedzi w tym pliku."
+                ? "Load the score tables (THMn.BIN). Without them there is no way to know in what order the modules play — the XMI alone is a bank of four-bar fragments in several keys, and the order lives in this file."
                 : ""
         ].filter(reason => reason !== "");
     }
@@ -107,13 +107,13 @@ class Player extends BElement {
         if (scores.length === 0) return "";
         return html`
         <fieldset>
-            <legend>Partytura (poziom natężenia)</legend>
+            <legend>Score (intensity level)</legend>
             ${scores.map(({ index, sequences: cycle, keys }) => html`
             <label>
                 <input type="radio" name="score" value="${index}" .checked="${index === selectedScore}"
                     @change="${() => selectScore(index)}">
-                ${index}: moduły <span class="numeric">${cycle.join(" → ")}</span>
-                <em>tonacje ${keys.join(",")}</em>
+                ${index}: modules <span class="numeric">${cycle.join(" → ")}</span>
+                <em>keys ${keys.join(",")}</em>
             </label>
             `)}
         </fieldset>
